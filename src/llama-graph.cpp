@@ -1293,6 +1293,10 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
     const int64_t n_tokens = cur->ne[1];
     const bool weight_before_ffn = arch == LLM_ARCH_LLAMA4; // for llama4, we apply the sigmoid-ed weights before the FFN
 
+    if (cparams.moe_trace_enable && arch == LLM_ARCH_QWEN35MOE) {
+        cb(cur, "ffn_moe_h_pre", il);
+    }
+
     ggml_tensor * logits = nullptr;
 
     if (probs_in == nullptr) {

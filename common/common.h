@@ -544,6 +544,14 @@ struct common_params {
     bool no_extra_bufts    = false; // disable extra buffer types (used for weight repacking)
     bool no_host           = false; // bypass host buffer allowing extra buffers to be used
 
+    // Experimental MoE lookup / trace options (default-off)
+    bool moe_lookup_enable = false;
+    bool moe_trace_enable  = false;
+
+    std::string moe_lookup_file;
+    std::string moe_lookup_replaced_experts;
+    std::string moe_trace_out;
+
     bool single_turn       = false; // single turn chat conversation
 
     ggml_type cache_type_k = GGML_TYPE_F16; // KV cache data type for the K

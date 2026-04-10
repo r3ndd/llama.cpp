@@ -10,10 +10,12 @@
 #include "ggml-opt.h"
 
 #include <map>
+#include <unordered_set>
 #include <vector>
 
 struct llama_model;
 class llama_batch_allocr;
+class llama_moe_trace_writer;
 
 class llama_io_read_i;
 class llama_io_write_i;
@@ -241,7 +243,16 @@ private:
             const llama_memory_context_i * mctx,
                           llm_graph_type   gtype) const;
 
+    static bool graph_eval_callback_bridge(struct ggml_tensor * t, bool ask, void * user_data);
+
     llm_graph_cb graph_get_cb() const;
+
+    struct eval_callback_payload {
+        ggml_backend_sched_eval_callback user_cb = nullptr;
+        void * user_data = nullptr;
+        llama_moe_trace_writer * moe_trace_writer = nullptr;
+        std::unordered_set<const ggml_tensor *> user_observed_tensors;
+    };
 
     // TODO: read/write lora adapters and cvec
     size_t state_write_data(llama_io_write_i & io);
@@ -311,6 +322,8 @@ private:
 
     ggml_backend_sched_ptr sched;
 
+    eval_callback_payload eval_cb_payload;
+
     bool sched_need_reserve = true;
 
     ggml_backend_t backend_cpu = nullptr;
@@ -339,6 +352,8 @@ private:
     ggml_backend_buffer_ptr buf_output;
 
     bool has_evaluated_once = false;
+
+    std::unique_ptr<llama_moe_trace_writer> moe_trace_writer;
 
     // env: LLAMA_GRAPH_REUSE_DISABLE
     bool graph_reuse_disable = false;

@@ -1476,6 +1476,11 @@ struct llama_context_params common_context_params_to_llama(const common_params &
     cparams.op_offload        = !params.no_op_offload;
     cparams.swa_full          = params.swa_full;
     cparams.kv_unified        = params.kv_unified;
+    cparams.moe_lookup_enable = params.moe_lookup_enable;
+    cparams.moe_trace_enable  = params.moe_trace_enable;
+    cparams.moe_lookup_file   = params.moe_lookup_file.c_str();
+    cparams.moe_lookup_replaced_experts = params.moe_lookup_replaced_experts.c_str();
+    cparams.moe_trace_out     = params.moe_trace_out.c_str();
 
     cparams.type_k = params.cache_type_k;
     cparams.type_v = params.cache_type_v;

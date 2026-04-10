@@ -353,6 +353,13 @@ extern "C" {
         ggml_backend_sched_eval_callback cb_eval;
         void * cb_eval_user_data;
 
+        // [EXPERIMENTAL] MoE lookup / trace options
+        bool        moe_lookup_enable; // enable runtime MoE lookup path (default: off)
+        bool        moe_trace_enable;  // enable MoE trace capture (default: off)
+        const char * moe_lookup_file;             // sidecar lookup artifact path
+        const char * moe_lookup_replaced_experts; // replaced-experts config path
+        const char * moe_trace_out;               // output NPZ path
+
         enum ggml_type type_k; // data type for K cache [EXPERIMENTAL]
         enum ggml_type type_v; // data type for V cache [EXPERIMENTAL]
 

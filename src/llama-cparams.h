@@ -3,6 +3,7 @@
 #include "llama.h"
 
 #include <cstdint>
+#include <string>
 
 #define LLAMA_MAX_SEQ 256
 
@@ -39,6 +40,13 @@ struct llama_cparams {
     bool op_offload;
     bool kv_unified;
     bool pipeline_parallel;
+
+    bool moe_lookup_enable;
+    bool moe_trace_enable;
+
+    std::string moe_lookup_file;
+    std::string moe_lookup_replaced_experts;
+    std::string moe_trace_out;
 
     enum llama_pooling_type pooling_type;
 

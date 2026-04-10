@@ -2328,6 +2328,41 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
             }
         }
     ).set_examples({LLAMA_EXAMPLE_SPECULATIVE, LLAMA_EXAMPLE_SERVER, LLAMA_EXAMPLE_CLI}).set_env("LLAMA_ARG_N_CPU_MOE_DRAFT"));
+    add_opt(common_arg(
+        {"--moe-lookup-enable"},
+        "enable experimental MoE lookup-table path (Qwen3.5-MoE only, default: disabled)",
+        [](common_params & params) {
+            params.moe_lookup_enable = true;
+        }
+    ).set_env("LLAMA_ARG_MOE_LOOKUP_ENABLE"));
+    add_opt(common_arg(
+        {"--moe-lookup-file"}, "FNAME",
+        "path to experimental MoE lookup sidecar artifact",
+        [](common_params & params, const std::string & value) {
+            params.moe_lookup_file = value;
+        }
+    ).set_env("LLAMA_ARG_MOE_LOOKUP_FILE"));
+    add_opt(common_arg(
+        {"--moe-lookup-replaced-experts"}, "FNAME",
+        "path to experimental replaced-experts configuration",
+        [](common_params & params, const std::string & value) {
+            params.moe_lookup_replaced_experts = value;
+        }
+    ).set_env("LLAMA_ARG_MOE_LOOKUP_REPLACED_EXPERTS"));
+    add_opt(common_arg(
+        {"--moe-trace-enable"},
+        "enable experimental MoE trace capture (default: disabled)",
+        [](common_params & params) {
+            params.moe_trace_enable = true;
+        }
+    ).set_env("LLAMA_ARG_MOE_TRACE_ENABLE"));
+    add_opt(common_arg(
+        {"--moe-trace-out"}, "FNAME",
+        "output path for experimental MoE trace NPZ v1 sidecar",
+        [](common_params & params, const std::string & value) {
+            params.moe_trace_out = value;
+        }
+    ).set_env("LLAMA_ARG_MOE_TRACE_OUT"));
     GGML_ASSERT(params.n_gpu_layers < 0); // string_format would need to be extended for a default >= 0
     add_opt(common_arg(
         {"-ngl", "--gpu-layers", "--n-gpu-layers"}, "N",

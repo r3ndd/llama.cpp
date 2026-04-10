@@ -8,12 +8,50 @@
 #include "llama-mmap.h"
 #include "llama-model.h"
 #include "llama-ext.h"
+#include "moe-trace.h"
 
 #include <cinttypes>
 #include <cmath>
 #include <cstring>
 #include <limits>
 #include <stdexcept>
+
+bool llama_context::graph_eval_callback_bridge(struct ggml_tensor * t, bool ask, void * user_data) {
+    auto * payload = static_cast<llama_context::eval_callback_payload *>(user_data);
+    if (payload == nullptr) {
+        return true;
+    }
+
+    if (ask) {
+        bool want_user = false;
+        if (payload->user_cb) {
+            want_user = payload->user_cb(t, true, payload->user_data);
+            if (want_user) {
+                payload->user_observed_tensors.insert(t);
+            }
+        }
+
+        bool want_trace = false;
+        if (payload->moe_trace_writer) {
+            want_trace = payload->moe_trace_writer->wants_tensor(t);
+        }
+
+        return want_user || want_trace;
+    }
+
+    bool ok_user = true;
+    if (payload->user_cb && payload->user_observed_tensors.count(t)) {
+        ok_user = payload->user_cb(t, false, payload->user_data);
+        payload->user_observed_tensors.erase(t);
+    }
+
+    bool ok_trace = true;
+    if (payload->moe_trace_writer && payload->moe_trace_writer->wants_tensor(t)) {
+        ok_trace = payload->moe_trace_writer->observe_tensor(t);
+    }
+
+    return ok_user && ok_trace;
+}
 
 //
 // llama_context
@@ -162,6 +200,34 @@ llama_context::llama_context(
 
     cparams.op_offload = params.op_offload;
     cparams.kv_unified = params.kv_unified;
+    cparams.moe_lookup_enable = params.moe_lookup_enable;
+    cparams.moe_trace_enable  = params.moe_trace_enable;
+    cparams.moe_lookup_file = params.moe_lookup_file ? params.moe_lookup_file : "";
+    cparams.moe_lookup_replaced_experts = params.moe_lookup_replaced_experts ? params.moe_lookup_replaced_experts : "";
+    cparams.moe_trace_out = params.moe_trace_out ? params.moe_trace_out : "";
+
+    if (model.arch != LLM_ARCH_QWEN35MOE && (cparams.moe_lookup_enable || cparams.moe_trace_enable)) {
+        LLAMA_LOG_WARN("%s: --moe-lookup-* / --moe-trace-* are supported only for Qwen3.5-MoE; disabling\n", __func__);
+        cparams.moe_lookup_enable = false;
+        cparams.moe_trace_enable = false;
+    }
+
+    if (cparams.moe_trace_enable) {
+        moe_trace_writer = std::make_unique<llama_moe_trace_writer>(model, cparams.moe_trace_out);
+        if (!moe_trace_writer->valid()) {
+            LLAMA_LOG_WARN("%s: failed to initialize MoE trace writer; trace capture disabled\n", __func__);
+            moe_trace_writer.reset();
+            cparams.moe_trace_enable = false;
+        }
+    }
+
+    if (cparams.moe_lookup_enable) {
+        LLAMA_LOG_WARN("%s: experimental --moe-lookup-enable is accepted for Qwen3.5-MoE, but runtime lookup is not wired in this stage; using baseline MoE path\n", __func__);
+    }
+
+    eval_cb_payload.user_cb = params.cb_eval;
+    eval_cb_payload.user_data = params.cb_eval_user_data;
+    eval_cb_payload.moe_trace_writer = moe_trace_writer.get();
 
     // initialized later
     cparams.pipeline_parallel = false;
@@ -1192,8 +1258,12 @@ llm_graph_result * llama_context::process_ubatch(const llama_ubatch & ubatch, ll
     } else {
         res->reset();
 
+        if (moe_trace_writer && cparams.moe_trace_enable) {
+            moe_trace_writer->reset_registry();
+        }
+
         ggml_backend_sched_reset(sched.get());
-        ggml_backend_sched_set_eval_callback(sched.get(), cparams.cb_eval, cparams.cb_eval_user_data);
+        ggml_backend_sched_set_eval_callback(sched.get(), llama_context::graph_eval_callback_bridge, &eval_cb_payload);
 
         //const auto t_start_us = ggml_time_us();
 
@@ -1222,6 +1292,11 @@ llm_graph_result * llama_context::process_ubatch(const llama_ubatch & ubatch, ll
         res->set_inputs(&ubatch);
 
         //LLAMA_LOG_INFO("graph set inputs time: %.3f ms\n", (ggml_time_us() - t_start_us)/1000.0);
+    }
+
+    eval_cb_payload.user_observed_tensors.clear();
+    if (moe_trace_writer) {
+        moe_trace_writer->begin_graph();
     }
 
     const auto status = graph_compute(res->get_gf(), ubatch.n_tokens > 1);
@@ -2217,6 +2292,10 @@ llm_graph_cb llama_context::graph_get_cb() const {
                 }
             }
         }
+
+        if (moe_trace_writer && cparams.moe_trace_enable) {
+            moe_trace_writer->register_tensor(cur, name, il);
+        }
     };
 }
 
@@ -2902,6 +2981,11 @@ llama_context_params llama_context_default_params() {
         /*.defrag_thold                =*/ -1.0f,
         /*.cb_eval                     =*/ nullptr,
         /*.cb_eval_user_data           =*/ nullptr,
+        /*.moe_lookup_enable           =*/ false,
+        /*.moe_trace_enable            =*/ false,
+        /*.moe_lookup_file             =*/ nullptr,
+        /*.moe_lookup_replaced_experts =*/ nullptr,
+        /*.moe_trace_out               =*/ nullptr,
         /*.type_k                      =*/ GGML_TYPE_F16,
         /*.type_v                      =*/ GGML_TYPE_F16,
         /*.abort_callback              =*/ nullptr,
