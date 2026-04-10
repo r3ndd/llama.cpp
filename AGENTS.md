@@ -12,4 +12,4 @@
 
 ## Project-wide learnings
 
-- `-hf/--hf-repo` downloads require TLS-enabled builds (OpenSSL/BoringSSL/LibreSSL). Without TLS support, `llama-cli` fails before inference when fetching from Hugging Face.
+- `llama-cli -hf/--hf-repo` requires a TLS-enabled build (OpenSSL/BoringSSL/LibreSSL); without TLS, HF downloads fail before inference starts.
