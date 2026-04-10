@@ -145,3 +145,7 @@ poetry.toml
 /.windsurf/
 # emscripten
 a.out.*
+
+# OpenCode
+.codanna*
+.fastembed*
