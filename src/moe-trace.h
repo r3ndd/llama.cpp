@@ -2,6 +2,7 @@
 
 #include "ggml.h"
 
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -9,6 +10,107 @@
 #include <vector>
 
 class llama_model;
+
+inline bool llama_moe_trace_validate_topk_consistency(
+        const int32_t * topk_ids,
+        const float   * topk_weights,
+        int n_topk,
+        int n_tokens,
+        int n_expert,
+        std::string * err_msg = nullptr) {
+    if (topk_ids == nullptr || topk_weights == nullptr) {
+        if (err_msg) {
+            *err_msg = "top-k buffers are null";
+        }
+        return false;
+    }
+    if (n_topk <= 0 || n_tokens < 0) {
+        if (err_msg) {
+            *err_msg = "invalid top-k/tokens dimensions";
+        }
+        return false;
+    }
+    if (n_expert <= 0) {
+        if (err_msg) {
+            *err_msg = "invalid expert count";
+        }
+        return false;
+    }
+
+    for (int tok = 0; tok < n_tokens; ++tok) {
+        const int row = tok * n_topk;
+        for (int k = 0; k < n_topk; ++k) {
+            const int32_t id = topk_ids[row + k];
+            const float w = topk_weights[row + k];
+
+            if (id < 0 || id >= n_expert) {
+                if (err_msg) {
+                    *err_msg = "top-k expert id out of range";
+                }
+                return false;
+            }
+            if (!std::isfinite(w)) {
+                if (err_msg) {
+                    *err_msg = "top-k weight is not finite";
+                }
+                return false;
+            }
+
+            for (int j = k + 1; j < n_topk; ++j) {
+                if (id == topk_ids[row + j]) {
+                    if (err_msg) {
+                        *err_msg = "top-k expert ids contain duplicates";
+                    }
+                    return false;
+                }
+            }
+        }
+    }
+
+    return true;
+}
+
+inline bool llama_moe_trace_validate_topk_parity(
+        const int32_t * topk_ids,
+        int n_topk,
+        const int32_t * argsort_ids,
+        int n_argsort,
+        int n_tokens,
+        std::string * err_msg = nullptr) {
+    if (topk_ids == nullptr || argsort_ids == nullptr) {
+        if (err_msg) {
+            *err_msg = "parity buffers are null";
+        }
+        return false;
+    }
+    if (n_topk <= 0 || n_argsort <= 0 || n_tokens < 0) {
+        if (err_msg) {
+            *err_msg = "invalid parity dimensions";
+        }
+        return false;
+    }
+    if (n_topk > n_argsort) {
+        if (err_msg) {
+            *err_msg = "top-k width exceeds argsort width";
+        }
+        return false;
+    }
+
+    for (int tok = 0; tok < n_tokens; ++tok) {
+        const int topk_row = tok * n_topk;
+        const int arg_row = tok * n_argsort;
+        for (int k = 0; k < n_topk; ++k) {
+            if (topk_ids[topk_row + k] != argsort_ids[arg_row + k]) {
+                if (err_msg) {
+                    *err_msg = "top-k ids mismatch vs argsort prefix";
+                }
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
 
 class llama_moe_trace_writer {
 public:
@@ -29,6 +131,7 @@ private:
     enum class tensor_kind {
         H_PRE,
         TOPK,
+        ARGSORT,
         WEIGHTS,
         Y_FULL,
     };
@@ -45,11 +148,13 @@ private:
 
         std::vector<float> h_pre;
         std::vector<int32_t> topk_ids;
+        std::vector<int32_t> argsort_ids;
         std::vector<float> topk_weights;
         std::vector<float> y_full;
 
         bool has_h_pre = false;
         bool has_topk = false;
+        bool has_argsort = false;
         bool has_weights = false;
         bool has_y_full = false;
     };
@@ -70,6 +175,7 @@ private:
     bool is_valid = false;
     bool flushed = false;
     bool warn_once_bad_tensor = false;
+    bool warn_once_bad_parity = false;
 
     int32_t n_embd = -1;
     int32_t n_topk = -1;

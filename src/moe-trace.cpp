@@ -228,6 +228,8 @@ void llama_moe_trace_writer::register_tensor(const ggml_tensor * t, const char *
         meta.kind = tensor_kind::H_PRE;
     } else if (strcmp(name, "ffn_moe_topk") == 0) {
         meta.kind = tensor_kind::TOPK;
+    } else if (strcmp(name, "ffn_moe_argsort") == 0) {
+        meta.kind = tensor_kind::ARGSORT;
     } else if (strcmp(name, "ffn_moe_weights") == 0) {
         meta.kind = tensor_kind::WEIGHTS;
     } else if (strcmp(name, "ffn_moe_out") == 0) {
@@ -309,6 +311,13 @@ bool llama_moe_trace_writer::ingest(const tensor_meta & meta, const ggml_tensor 
             p.n_tokens = (int) t->ne[1];
             p.has_topk = true;
             break;
+        case tensor_kind::ARGSORT:
+            if (!read_tensor_i32(t, p.argsort_ids)) {
+                return false;
+            }
+            p.n_tokens = (int) t->ne[1];
+            p.has_argsort = true;
+            break;
         case tensor_kind::WEIGHTS:
             if (!read_tensor_f32(t, p.topk_weights)) {
                 return false;
@@ -341,12 +350,17 @@ bool llama_moe_trace_writer::try_finalize_layer(int layer) {
         return false;
     }
 
+    const auto drop_pending = [&]() {
+        pending_by_layer.erase(it);
+    };
+
     layer_pending & p = it->second;
     if (!(p.has_h_pre && p.has_topk && p.has_weights && p.has_y_full)) {
         return false;
     }
 
     if (p.n_tokens <= 0 || p.n_embd <= 0 || p.n_topk <= 0) {
+        drop_pending();
         return false;
     }
 
@@ -358,14 +372,64 @@ bool llama_moe_trace_writer::try_finalize_layer(int layer) {
         p.topk_ids.size() != n_tok*n_k ||
         p.topk_weights.size() != n_tok*n_k ||
         p.y_full.size() != n_tok*n_emb) {
+        drop_pending();
         return false;
+    }
+
+    if (!llama_moe_trace_validate_topk_consistency(
+            p.topk_ids.data(),
+            p.topk_weights.data(),
+            p.n_topk,
+            p.n_tokens,
+            n_expert,
+            nullptr)) {
+        if (!warn_once_bad_parity) {
+            LLAMA_LOG_WARN("%s: dropping layer %d trace row batch due to invalid top-k IDs/weights consistency\n", __func__, layer);
+            warn_once_bad_parity = true;
+        }
+        drop_pending();
+        return false;
+    }
+
+    if (p.has_argsort) {
+        const int n_argsort = (int) (p.argsort_ids.size() / n_tok);
+        std::string parity_err;
+        if (n_argsort <= 0 || (size_t) n_argsort * n_tok != p.argsort_ids.size() ||
+            !llama_moe_trace_validate_topk_parity(
+                p.topk_ids.data(),
+                p.n_topk,
+                p.argsort_ids.data(),
+                n_argsort,
+                p.n_tokens,
+                &parity_err)) {
+            if (!warn_once_bad_parity) {
+                LLAMA_LOG_WARN("%s: dropping layer %d trace row batch due to top-k parity mismatch (%s)\n", __func__, layer, parity_err.c_str());
+                warn_once_bad_parity = true;
+            }
+            drop_pending();
+            return false;
+        }
     }
 
     if (n_embd < 0) {
         n_embd = (int32_t) p.n_embd;
+    } else if (n_embd != p.n_embd) {
+        if (!warn_once_bad_parity) {
+            LLAMA_LOG_WARN("%s: dropping layer %d trace row batch due to n_embd mismatch (%d vs %d)\n", __func__, layer, (int) n_embd, p.n_embd);
+            warn_once_bad_parity = true;
+        }
+        drop_pending();
+        return false;
     }
     if (n_topk < 0) {
         n_topk = (int32_t) p.n_topk;
+    } else if (n_topk != p.n_topk) {
+        if (!warn_once_bad_parity) {
+            LLAMA_LOG_WARN("%s: dropping layer %d trace row batch due to n_topk mismatch (%d vs %d)\n", __func__, layer, (int) n_topk, p.n_topk);
+            warn_once_bad_parity = true;
+        }
+        drop_pending();
+        return false;
     }
 
     for (size_t i = 0; i < n_tok; ++i) {
