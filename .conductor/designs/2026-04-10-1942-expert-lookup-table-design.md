@@ -1,7 +1,7 @@
 # Expert Lookup Table (ELT) Design — Qwen3.5-MoE, Algorithm 2 PoC
 
-Date: 2026-04-10 19:42  
-Status: Proposed implementation design (Phase 1 PoC)  
+Date: 2026-04-10 19:42
+Status: Proposed implementation design (Phase 1 PoC)
 Scope: `Qwen/Qwen3.5-35B-A3B` in llama.cpp runtime, mixed CPU+GPU offload, **Algorithm 2 only**
 
 ---
@@ -496,9 +496,9 @@ After this gate, extract reusable MoE lookup interfaces around `build_moe_ffn(..
 
 ## 18) Implementation Checklist (Execution-Oriented)
 
-- [ ] Add CLI/runtime params (default-off).
-- [ ] Add Qwen-only activation guard.
-- [ ] Implement trace hooks + NPZ writer v1.
+- [x] Add CLI/runtime params (default-off).
+- [x] Add Qwen-only activation guard.
+- [x] Implement trace hooks + NPZ writer v1.
 - [ ] Implement parity assertions/tests for trace correctness.
 - [ ] Build offline clustering/residual table tool.
 - [ ] Define sidecar header v1 and loader validation.
