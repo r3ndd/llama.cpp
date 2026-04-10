@@ -499,7 +499,7 @@ After this gate, extract reusable MoE lookup interfaces around `build_moe_ffn(..
 - [x] Add CLI/runtime params (default-off).
 - [x] Add Qwen-only activation guard.
 - [x] Implement trace hooks + NPZ writer v1.
-- [ ] Implement parity assertions/tests for trace correctness.
+- [x] Implement parity assertions/tests for trace correctness.
 - [ ] Build offline clustering/residual table tool.
 - [ ] Define sidecar header v1 and loader validation.
 - [ ] Integrate runtime lookup substitution in MoE path.
