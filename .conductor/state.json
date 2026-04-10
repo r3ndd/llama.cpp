@@ -1,0 +1,9 @@
+{
+  "mode": "conductor",
+  "stage": "idle",
+  "pending": [],
+  "last": {
+    "plan": "2026-04-10-1917-expert-lookup-table-plan.md",
+    "design": "2026-04-10-1942-expert-lookup-table-design.md"
+  }
+}
