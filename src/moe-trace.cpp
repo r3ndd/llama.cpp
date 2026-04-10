@@ -232,6 +232,8 @@ void llama_moe_trace_writer::register_tensor(const ggml_tensor * t, const char *
         meta.kind = tensor_kind::ARGSORT;
     } else if (strcmp(name, "ffn_moe_weights") == 0) {
         meta.kind = tensor_kind::WEIGHTS;
+    } else if (strcmp(name, "ffn_moe_expert_out") == 0) {
+        meta.kind = tensor_kind::TOPK_EXPERT_OUTPUTS;
     } else if (strcmp(name, "ffn_moe_out") == 0) {
         meta.kind = tensor_kind::Y_FULL;
     } else {
@@ -331,6 +333,15 @@ bool llama_moe_trace_writer::ingest(const tensor_meta & meta, const ggml_tensor 
             }
             p.has_weights = true;
             break;
+        case tensor_kind::TOPK_EXPERT_OUTPUTS:
+            if (!read_tensor_f32(t, p.topk_expert_outputs)) {
+                return false;
+            }
+            p.n_embd = (int) t->ne[0];
+            p.n_topk = (int) t->ne[1];
+            p.n_tokens = (int) t->ne[2];
+            p.has_topk_expert_outputs = true;
+            break;
         case tensor_kind::Y_FULL:
             if (!read_tensor_f32(t, p.y_full)) {
                 return false;
@@ -355,7 +366,7 @@ bool llama_moe_trace_writer::try_finalize_layer(int layer) {
     };
 
     layer_pending & p = it->second;
-    if (!(p.has_h_pre && p.has_topk && p.has_weights && p.has_y_full)) {
+    if (!(p.has_h_pre && p.has_topk && p.has_weights && p.has_topk_expert_outputs && p.has_y_full)) {
         return false;
     }
 
@@ -371,6 +382,7 @@ bool llama_moe_trace_writer::try_finalize_layer(int layer) {
     if (p.h_pre.size() != n_tok*n_emb ||
         p.topk_ids.size() != n_tok*n_k ||
         p.topk_weights.size() != n_tok*n_k ||
+        p.topk_expert_outputs.size() != n_tok*n_k*n_emb ||
         p.y_full.size() != n_tok*n_emb) {
         drop_pending();
         return false;
@@ -411,6 +423,20 @@ bool llama_moe_trace_writer::try_finalize_layer(int layer) {
         }
     }
 
+    if (!llama_moe_trace_validate_topk_expert_outputs(
+            p.topk_expert_outputs.data(),
+            p.n_topk,
+            p.n_tokens,
+            p.n_embd,
+            nullptr)) {
+        if (!warn_once_bad_parity) {
+            LLAMA_LOG_WARN("%s: dropping layer %d trace row batch due to invalid top-k expert outputs\n", __func__, layer);
+            warn_once_bad_parity = true;
+        }
+        drop_pending();
+        return false;
+    }
+
     if (n_embd < 0) {
         n_embd = (int32_t) p.n_embd;
     } else if (n_embd != p.n_embd) {
@@ -443,6 +469,9 @@ bool llama_moe_trace_writer::try_finalize_layer(int layer) {
     topk_ids.insert(topk_ids.end(), p.topk_ids.begin(), p.topk_ids.end());
     for (float v : p.topk_weights) {
         topk_weights.push_back(ggml_fp32_to_fp16(v));
+    }
+    for (float v : p.topk_expert_outputs) {
+        topk_expert_outputs.push_back(ggml_fp32_to_fp16(v));
     }
     for (float v : p.y_full) {
         y_full.push_back(ggml_fp32_to_fp16(v));
@@ -499,15 +528,17 @@ bool llama_moe_trace_writer::flush_npz() {
          << "}";
 
     std::vector<std::pair<std::string, std::vector<uint8_t>>> files;
-    files.reserve(7);
+    files.reserve(8);
 
     files.emplace_back("layer_ids.npy", npy_build<int32_t>("<i4", { n_rows }, layer_ids));
     files.emplace_back("token_ids.npy", npy_build<int32_t>("<i4", { n_rows }, token_ids));
     files.emplace_back("h_pre_moe.npy", npy_build<ggml_fp16_t>("<f2", { n_rows, (uint32_t) n_embd }, h_pre_moe));
     files.emplace_back("topk_ids.npy", npy_build<int32_t>("<i4", { n_rows, (uint32_t) n_topk }, topk_ids));
     files.emplace_back("topk_weights.npy", npy_build<ggml_fp16_t>("<f2", { n_rows, (uint32_t) n_topk }, topk_weights));
+    files.emplace_back("topk_expert_outputs.npy", npy_build<ggml_fp16_t>("<f2", { n_rows, (uint32_t) n_topk, (uint32_t) n_embd }, topk_expert_outputs));
     files.emplace_back("y_full.npy", npy_build<ggml_fp16_t>("<f2", { n_rows, (uint32_t) n_embd }, y_full));
-    files.emplace_back("metadata.json", std::vector<uint8_t>(meta.str().begin(), meta.str().end()));
+    const std::string meta_str = meta.str();
+    files.emplace_back("metadata.json", std::vector<uint8_t>(meta_str.begin(), meta_str.end()));
 
     if (!zip_write_store(output_path, files)) {
         LLAMA_LOG_WARN("%s: failed writing MoE trace NPZ to '%s'\n", __func__, output_path.c_str());

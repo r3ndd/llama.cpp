@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 
-"""Build Algorithm-2 MoE lookup tables from MoE trace NPZ v1 artifacts.
+"""Build Algorithm-2 MoE contribution tables from MoE trace NPZ v1 artifacts.
 
 This tool consumes one or more llama.cpp MoE trace NPZ files and emits:
-1) a per-layer shared centroid/residual lookup sidecar NPZ, and
+1) a per-layer shared centroid/contribution lookup sidecar NPZ, and
 2) a replaced-expert set JSON artifact.
 """
 
@@ -29,15 +29,13 @@ class TraceData:
     h_pre_moe: np.ndarray
     topk_ids: np.ndarray
     topk_weights: np.ndarray
-    y_full: np.ndarray
-    y_kept: Optional[np.ndarray]
-    residual_target: Optional[np.ndarray]
+    topk_expert_outputs: np.ndarray
     metadata: Dict[str, Any]
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Build Algorithm-2 shared MoE lookup tables from trace NPZ v1 files.",
+        description="Build Algorithm-2 shared MoE contribution tables from trace NPZ v1 files.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
@@ -108,25 +106,13 @@ def parse_args() -> argparse.Namespace:
         help="Heuristic for selecting replaced experts when not provided explicitly.",
     )
     parser.add_argument(
-        "--residual-source",
-        choices=["auto", "residual_target", "y_full_minus_y_kept", "proxy_replaced_mass_y_full"],
-        default="auto",
-        help=(
-            "Residual target source: `residual_target` array, `y_full - y_kept`, "
-            "or proxy `router_mass_replaced * y_full` when optional arrays are unavailable."
-        ),
-    )
-    parser.add_argument(
         "--scaling-mode",
-        choices=["none", "router_mass_replaced"],
-        default="router_mass_replaced",
-        help="Runtime scaling assumption used when training residual table values.",
-    )
-    parser.add_argument(
-        "--min-replaced-mass",
-        type=float,
-        default=1e-6,
-        help="Rows with replaced mass <= threshold are ignored for mass-normalized residual aggregation.",
+        choices=["s_missing", "router_mass_replaced"],
+        default="s_missing",
+        help=(
+            "Runtime scaling mode. `s_missing` is canonical for revised Algorithm-2. "
+            "`router_mass_replaced` is accepted as a backward-compatible alias."
+        ),
     )
     parser.add_argument("--seed", type=int, default=12345, help="Random seed.")
     return parser.parse_args()
@@ -175,9 +161,7 @@ def load_trace_npz(path: Path) -> TraceData:
             h_pre_moe = _require_array(npz, "h_pre_moe")
             topk_ids = _require_array(npz, "topk_ids")
             topk_weights = _require_array(npz, "topk_weights")
-            y_full = _require_array(npz, "y_full")
-            y_kept = npz["y_kept"] if "y_kept" in npz else None
-            residual_target = npz["residual_target"] if "residual_target" in npz else None
+            topk_expert_outputs = _require_array(npz, "topk_expert_outputs")
     except Exception as exc:
         raise ValueError(f"failed to load trace NPZ '{path}': {exc}") from exc
 
@@ -186,11 +170,9 @@ def load_trace_npz(path: Path) -> TraceData:
     h_pre_moe = np.asarray(h_pre_moe, dtype=np.float32)
     topk_ids = np.asarray(topk_ids, dtype=np.int32)
     topk_weights = np.asarray(topk_weights, dtype=np.float32)
-    y_full = np.asarray(y_full, dtype=np.float32)
-    y_kept = None if y_kept is None else np.asarray(y_kept, dtype=np.float32)
-    residual_target = None if residual_target is None else np.asarray(residual_target, dtype=np.float32)
+    topk_expert_outputs = np.asarray(topk_expert_outputs, dtype=np.float32)
 
-    validate_trace_shapes(path, layer_ids, token_ids, h_pre_moe, topk_ids, topk_weights, y_full, y_kept, residual_target)
+    validate_trace_shapes(path, layer_ids, token_ids, h_pre_moe, topk_ids, topk_weights, topk_expert_outputs)
 
     return TraceData(
         path=path,
@@ -199,9 +181,7 @@ def load_trace_npz(path: Path) -> TraceData:
         h_pre_moe=h_pre_moe,
         topk_ids=topk_ids,
         topk_weights=topk_weights,
-        y_full=y_full,
-        y_kept=y_kept,
-        residual_target=residual_target,
+        topk_expert_outputs=topk_expert_outputs,
         metadata=metadata,
     )
 
@@ -213,9 +193,7 @@ def validate_trace_shapes(
     h_pre_moe: np.ndarray,
     topk_ids: np.ndarray,
     topk_weights: np.ndarray,
-    y_full: np.ndarray,
-    y_kept: Optional[np.ndarray],
-    residual_target: Optional[np.ndarray],
+    topk_expert_outputs: np.ndarray,
 ) -> None:
     if layer_ids.ndim != 1:
         raise ValueError(f"{path}: layer_ids must be 1D")
@@ -228,33 +206,30 @@ def validate_trace_shapes(
 
     if h_pre_moe.ndim != 2:
         raise ValueError(f"{path}: h_pre_moe must have shape [N, n_embd]")
-    if y_full.ndim != 2:
-        raise ValueError(f"{path}: y_full must have shape [N, n_embd]")
+    if topk_expert_outputs.ndim != 3:
+        raise ValueError(f"{path}: topk_expert_outputs must have shape [N, k, n_embd]")
     if topk_ids.ndim != 2 or topk_weights.ndim != 2:
         raise ValueError(f"{path}: topk_ids/topk_weights must have shape [N, k]")
 
     if h_pre_moe.shape[0] != n_rows:
         raise ValueError(f"{path}: h_pre_moe row count mismatch")
-    if y_full.shape[0] != n_rows:
-        raise ValueError(f"{path}: y_full row count mismatch")
+    if topk_expert_outputs.shape[0] != n_rows:
+        raise ValueError(f"{path}: topk_expert_outputs row count mismatch")
     if topk_ids.shape[0] != n_rows or topk_weights.shape[0] != n_rows:
         raise ValueError(f"{path}: topk_ids/topk_weights row count mismatch")
     if topk_ids.shape[1] != topk_weights.shape[1]:
         raise ValueError(f"{path}: topk_ids and topk_weights k dimension mismatch")
-    if y_full.shape[1] != h_pre_moe.shape[1]:
-        raise ValueError(f"{path}: y_full and h_pre_moe n_embd mismatch")
-
-    if y_kept is not None:
-        if y_kept.shape != y_full.shape:
-            raise ValueError(f"{path}: y_kept shape must match y_full")
-    if residual_target is not None:
-        if residual_target.shape != y_full.shape:
-            raise ValueError(f"{path}: residual_target shape must match y_full")
+    if topk_expert_outputs.shape[1] != topk_ids.shape[1]:
+        raise ValueError(f"{path}: topk_expert_outputs k dimension mismatch")
+    if topk_expert_outputs.shape[2] != h_pre_moe.shape[1]:
+        raise ValueError(f"{path}: topk_expert_outputs and h_pre_moe n_embd mismatch")
 
     if np.any(topk_ids < 0):
         raise ValueError(f"{path}: topk_ids contains negative expert IDs")
     if not np.all(np.isfinite(topk_weights)):
         raise ValueError(f"{path}: topk_weights contains non-finite values")
+    if not np.all(np.isfinite(topk_expert_outputs)):
+        raise ValueError(f"{path}: topk_expert_outputs contains non-finite values")
 
 
 def parse_layers_arg(layers_arg: str, available_layers: np.ndarray) -> List[int]:
@@ -332,6 +307,16 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError("--distance-batch-size must be non-zero")
 
 
+def normalize_scaling_mode(scaling_mode: str) -> str:
+    if scaling_mode == "router_mass_replaced":
+        print(
+            "warning: --scaling-mode=router_mass_replaced is deprecated; treating as s_missing",
+            file=sys.stderr,
+        )
+        return "s_missing"
+    return scaling_mode
+
+
 def concat_field(traces: List[TraceData], field: str) -> np.ndarray:
     return np.concatenate([getattr(t, field) for t in traces], axis=0)
 
@@ -402,38 +387,6 @@ def make_replaced_mask(replaced: Dict[int, List[int]], n_layer_total: int, n_exp
     return mask
 
 
-def compute_replaced_mass(
-    layer_ids: np.ndarray,
-    topk_ids: np.ndarray,
-    topk_weights: np.ndarray,
-    replaced_mask: np.ndarray,
-) -> np.ndarray:
-    out = np.zeros(layer_ids.shape[0], dtype=np.float32)
-    for layer in np.unique(layer_ids):
-        layer = int(layer)
-        if layer < 0 or layer >= replaced_mask.shape[0]:
-            continue
-        rows = np.where(layer_ids == layer)[0]
-        if rows.size == 0:
-            continue
-
-        ids = topk_ids[rows]
-        hit = replaced_mask[layer][ids]
-        weights = topk_weights[rows]
-        out[rows] = np.sum(np.where(hit, weights, 0.0), axis=1, dtype=np.float32)
-    return out
-
-
-def choose_residual_source(args: argparse.Namespace, has_residual_target: bool, has_y_kept: bool) -> str:
-    if args.residual_source != "auto":
-        return args.residual_source
-    if has_residual_target:
-        return "residual_target"
-    if has_y_kept:
-        return "y_full_minus_y_kept"
-    return "proxy_replaced_mass_y_full"
-
-
 def nearest_centroid_assignments(x: np.ndarray, centroids: np.ndarray, batch_size: int) -> np.ndarray:
     if batch_size <= 0:
         batch_size = x.shape[0]
@@ -482,14 +435,14 @@ def kmeans(
     return centroids
 
 
-def aggregate_residual_table(
+def aggregate_contribution_table(
     assignments: np.ndarray,
-    residuals: np.ndarray,
+    contributions: np.ndarray,
     n_clusters: int,
 ) -> Tuple[np.ndarray, np.ndarray]:
-    sums = np.zeros((n_clusters, residuals.shape[1]), dtype=np.float32)
+    sums = np.zeros((n_clusters, contributions.shape[1]), dtype=np.float32)
     counts = np.bincount(assignments, minlength=n_clusters).astype(np.int32)
-    np.add.at(sums, assignments, residuals)
+    np.add.at(sums, assignments, contributions)
 
     table = np.zeros_like(sums)
     non_empty = counts > 0
@@ -497,9 +450,49 @@ def aggregate_residual_table(
     return table, counts
 
 
+def compute_removed_relative_contributions(
+    layer_ids: np.ndarray,
+    topk_ids: np.ndarray,
+    topk_weights: np.ndarray,
+    topk_expert_outputs: np.ndarray,
+    replaced_mask: np.ndarray,
+) -> Tuple[np.ndarray, np.ndarray]:
+    n_rows = layer_ids.shape[0]
+    n_embd = topk_expert_outputs.shape[2]
+
+    targets = np.zeros((n_rows, n_embd), dtype=np.float32)
+    replaced_mass = np.zeros((n_rows,), dtype=np.float32)
+
+    for layer in np.unique(layer_ids):
+        layer = int(layer)
+        if layer < 0 or layer >= replaced_mask.shape[0]:
+            continue
+
+        rows = np.where(layer_ids == layer)[0]
+        if rows.size == 0:
+            continue
+
+        layer_topk_ids = topk_ids[rows]
+        layer_topk_weights = topk_weights[rows]
+        layer_outputs = topk_expert_outputs[rows]
+
+        hits = replaced_mask[layer][layer_topk_ids]
+        mass = np.sum(np.where(hits, layer_topk_weights, 0.0), axis=1, dtype=np.float32)
+        replaced_mass[rows] = mass
+
+        norm = np.zeros_like(layer_topk_weights, dtype=np.float32)
+        valid = mass > 0.0
+        if np.any(valid):
+            norm[valid] = np.where(hits[valid], layer_topk_weights[valid] / mass[valid, None], 0.0)
+            targets[rows[valid]] = np.einsum("rk,rkd->rd", norm[valid], layer_outputs[valid], optimize=True)
+
+    return targets, replaced_mass
+
+
 def main() -> int:
     args = parse_args()
     validate_args(args)
+    args.scaling_mode = normalize_scaling_mode(args.scaling_mode)
     rng = np.random.default_rng(args.seed)
 
     traces = [load_trace_npz(p) for p in args.input]
@@ -512,16 +505,13 @@ def main() -> int:
     h_pre_moe = concat_field(traces, "h_pre_moe")
     topk_ids = concat_field(traces, "topk_ids")
     topk_weights = concat_field(traces, "topk_weights")
-    y_full = concat_field(traces, "y_full")
+    topk_expert_outputs = concat_field(traces, "topk_expert_outputs")
 
     layers = parse_layers_arg(args.layers, layer_ids)
     if not layers:
         raise ValueError("no layers selected")
 
     n_layer_total = max(int(np.max(layer_ids)) + 1, max(layers) + 1)
-
-    has_residual_target = all(t.residual_target is not None for t in traces)
-    has_y_kept = all(t.y_kept is not None for t in traces)
 
     if args.replaced_experts_json is not None:
         replaced = load_replaced_experts_json(args.replaced_experts_json, layers, n_expert)
@@ -535,32 +525,13 @@ def main() -> int:
         )
 
     replaced_mask = make_replaced_mask(replaced, n_layer_total=n_layer_total, n_expert=n_expert)
-    replaced_mass = compute_replaced_mass(
+    contribution_targets, replaced_mass = compute_removed_relative_contributions(
         layer_ids=layer_ids,
         topk_ids=topk_ids,
         topk_weights=topk_weights,
+        topk_expert_outputs=topk_expert_outputs,
         replaced_mask=replaced_mask,
     )
-
-    residual_source = choose_residual_source(args, has_residual_target=has_residual_target, has_y_kept=has_y_kept)
-    if residual_source == "residual_target":
-        if not has_residual_target:
-            raise ValueError("--residual-source=residual_target requested but some traces lack residual_target")
-        residuals = np.concatenate([t.residual_target for t in traces if t.residual_target is not None], axis=0)
-    elif residual_source == "y_full_minus_y_kept":
-        if not has_y_kept:
-            raise ValueError("--residual-source=y_full_minus_y_kept requested but some traces lack y_kept")
-        y_kept = np.concatenate([t.y_kept for t in traces if t.y_kept is not None], axis=0)
-        residuals = y_full - y_kept
-    else:
-        residuals = y_full * replaced_mass[:, None]
-        print(
-            "warning: using proxy residual source (router_mass_replaced * y_full) because optional residual arrays are unavailable",
-            file=sys.stderr,
-        )
-
-    if residuals.shape != y_full.shape:
-        raise ValueError("internal error: residual shape mismatch")
 
     out_arrays: Dict[str, np.ndarray] = {
         "format_version": np.asarray(1, dtype=np.int32),
@@ -571,6 +542,8 @@ def main() -> int:
         "n_expert": np.asarray(n_expert, dtype=np.int32),
         "n_topk": np.asarray(n_topk, dtype=np.int32),
         "replaced_expert_mask": replaced_mask,
+        "target_semantics": np.asarray("removed_expert_relative_weighted_contribution"),
+        "runtime_scaling": np.asarray(args.scaling_mode),
     }
 
     for layer in layers:
@@ -580,7 +553,7 @@ def main() -> int:
             continue
 
         layer_h = h_pre_moe[rows]
-        layer_res = residuals[rows]
+        layer_targets = contribution_targets[rows]
         layer_mass = replaced_mass[rows]
 
         if args.kmeans_max_samples_per_layer > 0 and layer_h.shape[0] > args.kmeans_max_samples_per_layer:
@@ -598,19 +571,10 @@ def main() -> int:
         )
         assignments = nearest_centroid_assignments(layer_h, centroids, batch_size=args.distance_batch_size)
 
-        if args.scaling_mode == "router_mass_replaced":
-            valid = layer_mass > args.min_replaced_mass
-            if np.any(valid):
-                norm = layer_res[valid] / layer_mass[valid, None]
-                table, counts = aggregate_residual_table(assignments[valid], norm, n_clusters=centroids.shape[0])
-            else:
-                table = np.zeros((centroids.shape[0], n_embd), dtype=np.float32)
-                counts = np.zeros((centroids.shape[0],), dtype=np.int32)
-        else:
-            table, counts = aggregate_residual_table(assignments, layer_res, n_clusters=centroids.shape[0])
+        table, counts = aggregate_contribution_table(assignments, layer_targets, n_clusters=centroids.shape[0])
 
         out_arrays[f"layer_{layer}_centroids"] = centroids.astype(np.float16)
-        out_arrays[f"layer_{layer}_residuals"] = table.astype(np.float16)
+        out_arrays[f"layer_{layer}_contributions"] = table.astype(np.float16)
         out_arrays[f"layer_{layer}_counts"] = counts.astype(np.int32)
         out_arrays[f"layer_{layer}_mean_replaced_mass"] = np.asarray(float(np.mean(layer_mass)), dtype=np.float32)
 
@@ -619,8 +583,8 @@ def main() -> int:
         "algorithm": "algorithm2_shared_table",
         "input_traces": [str(p) for p in args.input],
         "layers": layers,
-        "residual_source": residual_source,
-        "scaling_mode": args.scaling_mode,
+        "target_semantics": "removed_expert_relative_weighted_contribution",
+        "runtime_scaling": args.scaling_mode,
         "clusters_per_layer": int(args.clusters_per_layer),
         "kmeans_iters": int(args.kmeans_iters),
         "kmeans_max_samples_per_layer": int(args.kmeans_max_samples_per_layer),
@@ -634,7 +598,6 @@ def main() -> int:
     }
     out_arrays["metadata_json"] = np.asarray(json.dumps(meta, separators=(",", ":")))
     out_arrays["scaling_mode"] = np.asarray(args.scaling_mode)
-    out_arrays["residual_source"] = np.asarray(residual_source)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(args.output, **out_arrays)

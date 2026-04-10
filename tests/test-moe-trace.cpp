@@ -148,6 +148,48 @@ static void test_topk_parity_rejects_invalid_dimensions(testing & t) {
     t.assert_equal("dimension check error", std::string("top-k width exceeds argsort width"), err);
 }
 
+static void test_topk_expert_outputs_ok(testing & t) {
+    const int n_tokens = 2;
+    const int n_topk = 2;
+    const int n_embd = 3;
+
+    const std::vector<float> outputs = {
+        0.1f, 0.2f, 0.3f,
+        0.4f, 0.5f, 0.6f,
+        0.7f, 0.8f, 0.9f,
+        1.0f, 1.1f, 1.2f,
+    };
+
+    std::string err;
+    const bool ok = llama_moe_trace_validate_topk_expert_outputs(
+        outputs.data(),
+        n_topk,
+        n_tokens,
+        n_embd,
+        &err);
+
+    t.assert_true("finite top-k expert outputs should pass", ok);
+    t.assert_true("error should be empty on success", err.empty());
+}
+
+static void test_topk_expert_outputs_rejects_non_finite(testing & t) {
+    const std::vector<float> outputs = {
+        0.1f, 0.2f,
+        std::numeric_limits<float>::quiet_NaN(), 0.4f,
+    };
+
+    std::string err;
+    const bool ok = llama_moe_trace_validate_topk_expert_outputs(
+        outputs.data(),
+        2,
+        1,
+        2,
+        &err);
+
+    t.assert_true("non-finite expert output must fail", !ok);
+    t.assert_equal("non-finite expert output error", std::string("top-k expert output is not finite"), err);
+}
+
 int main() {
     testing t(std::cout);
     t.test("topk consistency accepts valid IDs/weights", test_topk_consistency_ok);
@@ -157,5 +199,7 @@ int main() {
     t.test("topk parity accepts argsort prefix match", test_topk_parity_ok);
     t.test("topk parity rejects prefix mismatch", test_topk_parity_rejects_prefix_mismatch);
     t.test("topk parity rejects invalid dimensions", test_topk_parity_rejects_invalid_dimensions);
+    t.test("topk expert outputs accepts finite values", test_topk_expert_outputs_ok);
+    t.test("topk expert outputs rejects non-finite values", test_topk_expert_outputs_rejects_non_finite);
     return t.summary();
 }

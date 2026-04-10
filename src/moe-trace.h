@@ -112,6 +112,38 @@ inline bool llama_moe_trace_validate_topk_parity(
     return true;
 }
 
+inline bool llama_moe_trace_validate_topk_expert_outputs(
+        const float * topk_expert_outputs,
+        int n_topk,
+        int n_tokens,
+        int n_embd,
+        std::string * err_msg = nullptr) {
+    if (topk_expert_outputs == nullptr) {
+        if (err_msg) {
+            *err_msg = "top-k expert output buffer is null";
+        }
+        return false;
+    }
+    if (n_topk <= 0 || n_embd <= 0 || n_tokens < 0) {
+        if (err_msg) {
+            *err_msg = "invalid top-k expert output dimensions";
+        }
+        return false;
+    }
+
+    const size_t n = (size_t) n_topk * (size_t) n_tokens * (size_t) n_embd;
+    for (size_t i = 0; i < n; ++i) {
+        if (!std::isfinite(topk_expert_outputs[i])) {
+            if (err_msg) {
+                *err_msg = "top-k expert output is not finite";
+            }
+            return false;
+        }
+    }
+
+    return true;
+}
+
 class llama_moe_trace_writer {
 public:
     llama_moe_trace_writer(const llama_model & model, const std::string & output_path);
@@ -133,6 +165,7 @@ private:
         TOPK,
         ARGSORT,
         WEIGHTS,
+        TOPK_EXPERT_OUTPUTS,
         Y_FULL,
     };
 
@@ -150,12 +183,14 @@ private:
         std::vector<int32_t> topk_ids;
         std::vector<int32_t> argsort_ids;
         std::vector<float> topk_weights;
+        std::vector<float> topk_expert_outputs;
         std::vector<float> y_full;
 
         bool has_h_pre = false;
         bool has_topk = false;
         bool has_argsort = false;
         bool has_weights = false;
+        bool has_topk_expert_outputs = false;
         bool has_y_full = false;
     };
 
@@ -188,5 +223,6 @@ private:
     std::vector<ggml_fp16_t> h_pre_moe;
     std::vector<int32_t> topk_ids;
     std::vector<ggml_fp16_t> topk_weights;
+    std::vector<ggml_fp16_t> topk_expert_outputs;
     std::vector<ggml_fp16_t> y_full;
 };

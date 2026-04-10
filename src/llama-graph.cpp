@@ -1585,6 +1585,10 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
         cb(experts, "ffn_moe_down_scaled", il);
     }
 
+    if (cparams.moe_trace_enable && arch == LLM_ARCH_QWEN35MOE) {
+        cb(experts, "ffn_moe_expert_out", il);
+    }
+
     if (!weight_before_ffn) {
         experts = ggml_mul(ctx0, experts, weights);
         cb(experts, "ffn_moe_weighted", il);

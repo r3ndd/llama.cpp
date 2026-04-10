@@ -1,5 +1,7 @@
 llama_add_compile_flags()
 
+find_package(Python3 COMPONENTS Interpreter)
+
 function(llama_build source)
     set(TEST_SOURCES ${source} ${ARGN})
 
@@ -235,6 +237,16 @@ llama_build_and_test(test-arg-parser.cpp)
 llama_build(test-moe-trace.cpp)
 target_link_libraries(test-moe-trace PRIVATE llama)
 llama_test(test-moe-trace)
+
+if (Python3_Interpreter_FOUND)
+    llama_test_cmd(
+        ${CMAKE_COMMAND}
+        NAME test-build-moe-lookup
+        LABEL python
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+        ARGS -E env PYTHONPATH=${PROJECT_SOURCE_DIR} ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tests/test-build-moe-lookup.py
+    )
+endif()
 
 if (NOT LLAMA_SANITIZE_ADDRESS AND NOT GGML_SCHED_NO_REALLOC)
   # TODO: repair known memory leaks
