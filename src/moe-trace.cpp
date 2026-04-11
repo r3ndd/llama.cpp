@@ -375,6 +375,22 @@ bool llama_moe_trace_writer::try_finalize_layer(int layer) {
         return false;
     }
 
+    std::string topk_width_err;
+    if (!llama_moe_trace_validate_expected_topk(p.n_topk, n_expert_used, &topk_width_err)) {
+        if (!warn_once_bad_parity) {
+            LLAMA_LOG_WARN(
+                "%s: dropping layer %d trace row batch due to %s (traced=%d, expected=%d)\n",
+                __func__,
+                layer,
+                topk_width_err.c_str(),
+                p.n_topk,
+                (int) n_expert_used);
+            warn_once_bad_parity = true;
+        }
+        drop_pending();
+        return false;
+    }
+
     const size_t n_tok = (size_t) p.n_tokens;
     const size_t n_emb = (size_t) p.n_embd;
     const size_t n_k = (size_t) p.n_topk;

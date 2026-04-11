@@ -23,7 +23,7 @@ Optional arrays:
 
 ## CLI usage
 
-Example:
+Example (build lookup tables):
 
 ```bash
 python3 scripts/build-moe-lookup.py \
@@ -34,6 +34,16 @@ python3 scripts/build-moe-lookup.py \
   --clusters-per-layer 1024 \
   --replace-ratio 0.10 \
   --scaling-mode s_missing
+```
+
+Example (plot-only heuristic mode):
+
+```bash
+python3 scripts/build-moe-lookup.py \
+  --input trace-run-a.npz \
+  --input trace-run-b.npz \
+  --plot-heuristic \
+  --plot-output out/qwen35moe.heuristic.png
 ```
 
 Key options:
@@ -48,6 +58,22 @@ Key options:
 - `--kmeans-max-samples-per-layer`: cap on rows used to train centroids
 - `--replace-ratio`: fraction of experts replaced per layer when deriving sets
 - `--scaling-mode`: `s_missing|router_mass_replaced` (`router_mass_replaced` is accepted as a deprecated alias of `s_missing`)
+- `--plot-heuristic`: plot-only mode; computes routing-usage heuristic and writes a histogram instead of generating lookup/replaced-expert artifacts
+- `--plot-output`: image output path for `--plot-heuristic` (defaults to `<output>.heuristic.png` when `--output` is set, else `./moe-heuristic.png`)
+
+## Heuristic plot mode
+
+When `--plot-heuristic` is enabled, the script:
+
+1. Loads and validates traces as usual.
+2. Computes per-layer per-expert heuristic scores (currently usage counts from `topk_ids`).
+3. Builds one histogram over all selected layer/expert scores with a log-scale x-axis.
+4. Draws percentile markers at 10%, 20%, …, 90% as vertical lines.
+5. Saves the plot image and exits successfully.
+
+In this mode, lookup sidecar and replaced-experts JSON outputs are not produced.
+The plotting path uses a non-interactive backend (`Agg`) for headless environments.
+Zero/near-zero heuristic scores are clamped to a small positive floor for plotting so log scaling is safe.
 
 ## Target semantics (revised Algorithm 2)
 

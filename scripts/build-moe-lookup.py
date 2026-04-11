@@ -10,8 +10,10 @@ This tool consumes one or more llama.cpp MoE trace NPZ files and emits:
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import math
+import os
 import sys
 import zipfile
 from dataclasses import dataclass
@@ -48,8 +50,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output",
         type=Path,
-        required=True,
-        help="Output lookup sidecar NPZ path.",
+        default=None,
+        help="Output lookup sidecar NPZ path (required unless --plot-heuristic is used).",
     )
     parser.add_argument(
         "--output-replaced-experts",
@@ -104,6 +106,24 @@ def parse_args() -> argparse.Namespace:
         choices=["least-routed"],
         default="least-routed",
         help="Heuristic for selecting replaced experts when not provided explicitly.",
+    )
+    parser.add_argument(
+        "--plot-heuristic",
+        action="store_true",
+        help=(
+            "Compute and plot heuristic scores (currently routing usage) across "
+            "all selected layers/experts, then exit without generating lookup sidecars."
+        ),
+    )
+    parser.add_argument(
+        "--plot-output",
+        type=Path,
+        default=None,
+        help=(
+            "Output image path for --plot-heuristic mode. "
+            "Defaults to <output>.heuristic.png when --output is provided, "
+            "otherwise ./moe-heuristic.png"
+        ),
     )
     parser.add_argument(
         "--scaling-mode",
@@ -299,6 +319,8 @@ def infer_dim_consistency(traces: List[TraceData]) -> Tuple[int, int, int]:
 
 
 def validate_args(args: argparse.Namespace) -> None:
+    if not args.plot_heuristic and args.output is None:
+        raise ValueError("--output is required unless --plot-heuristic is used")
     if args.clusters_per_layer <= 0:
         raise ValueError("--clusters-per-layer must be > 0")
     if args.kmeans_iters <= 0:
@@ -315,6 +337,14 @@ def normalize_scaling_mode(scaling_mode: str) -> str:
         )
         return "s_missing"
     return scaling_mode
+
+
+def default_plot_output_path(args: argparse.Namespace) -> Path:
+    if args.plot_output is not None:
+        return args.plot_output
+    if args.output is not None:
+        return args.output.with_suffix(".heuristic.png")
+    return Path("moe-heuristic.png")
 
 
 def concat_field(traces: List[TraceData], field: str) -> np.ndarray:
@@ -354,14 +384,7 @@ def derive_replaced_experts(
     if replace_ratio < 0.0 or replace_ratio >= 1.0:
         raise ValueError("--replace-ratio must be in [0.0, 1.0)")
 
-    usage = np.zeros((max(layers) + 1, n_expert), dtype=np.int64)
-    for layer in layers:
-        rows = np.where(layer_ids == layer)[0]
-        if rows.size == 0:
-            continue
-        flat = topk_ids[rows].reshape(-1)
-        binc = np.bincount(flat, minlength=n_expert)
-        usage[layer, :] = binc[:n_expert]
+    usage = compute_usage_scores(topk_ids=topk_ids, layer_ids=layer_ids, layers=layers, n_expert=n_expert)
 
     replaced: Dict[int, List[int]] = {}
     for layer in layers:
@@ -375,6 +398,115 @@ def derive_replaced_experts(
         replaced[layer] = [int(x) for x in order[:n_replace]]
 
     return replaced
+
+
+def compute_usage_scores(topk_ids: np.ndarray, layer_ids: np.ndarray, layers: List[int], n_expert: int) -> np.ndarray:
+    usage = np.zeros((max(layers) + 1, n_expert), dtype=np.int64)
+    for layer in layers:
+        rows = np.where(layer_ids == layer)[0]
+        if rows.size == 0:
+            continue
+        flat = topk_ids[rows].reshape(-1)
+        binc = np.bincount(flat, minlength=n_expert)
+        usage[layer, :] = binc[:n_expert]
+    return usage
+
+
+def _ensure_output_parent(path: Path) -> None:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise ValueError(f"failed to create output directory '{path.parent}': {exc}") from exc
+
+
+def _prepare_matplotlib_import_path() -> None:
+    """Avoid mixed matplotlib/mpl_toolkits installations in this process.
+
+    Some environments preload `mpl_toolkits` from `/usr/lib/python3/dist-packages`
+    while `matplotlib` comes from `/usr/local/...`, which crashes on import with
+    Axis API mismatches. Keep this fix scoped to the plotting path.
+    """
+
+    mpl_spec = importlib.util.find_spec("matplotlib")
+    if mpl_spec is None or mpl_spec.origin is None:
+        return
+
+    mpl_origin = os.path.normpath(mpl_spec.origin)
+    local_dist = "/usr/local/lib/python3.12/dist-packages"
+    system_dist = "/usr/lib/python3/dist-packages"
+
+    if mpl_origin.startswith(local_dist):
+        local_mpl_toolkits = os.path.join(local_dist, "mpl_toolkits")
+        if os.path.isdir(local_mpl_toolkits):
+            sys.path = [p for p in sys.path if os.path.normpath(p) != system_dist]
+
+    for mod_name in list(sys.modules.keys()):
+        if mod_name == "mpl_toolkits" or mod_name.startswith("mpl_toolkits."):
+            del sys.modules[mod_name]
+
+
+def plot_heuristic_scores_histogram(usage: np.ndarray, layers: List[int], output_path: Path) -> None:
+    if not layers:
+        raise ValueError("no layers selected")
+
+    scores = usage[layers, :].reshape(-1).astype(np.float64)
+    if scores.size == 0:
+        raise ValueError("no heuristic scores available to plot")
+
+    try:
+        _prepare_matplotlib_import_path()
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ImportError as exc:
+        raise ValueError("--plot-heuristic requires matplotlib") from exc
+    except Exception as exc:
+        raise ValueError(
+            "failed to initialize matplotlib for --plot-heuristic; "
+            f"this may indicate mixed matplotlib/mpl_toolkits installations: {exc}"
+        ) from exc
+
+    safe_scores, log_floor = prepare_scores_for_log_x_axis(scores)
+    score_min = float(np.min(safe_scores))
+    score_max = float(np.max(safe_scores))
+    if score_max > score_min:
+        bins = np.logspace(np.log10(score_min), np.log10(score_max), num=50)
+    else:
+        bins = np.asarray([score_min * 0.9, score_min * 1.1], dtype=np.float64)
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.hist(safe_scores, bins=bins, color="tab:blue", alpha=0.75, edgecolor="black", linewidth=0.5)
+    ax.set_xscale("log")
+    ax.set_title("MoE routing-usage heuristic across selected layers/experts")
+    ax.set_xlabel("Heuristic score (usage count, log scale)")
+    ax.set_ylabel("Frequency")
+
+    for pct in range(10, 100, 10):
+        val = float(np.percentile(scores, pct))
+        safe_val = max(val, log_floor)
+        ax.axvline(safe_val, color="tab:red", linestyle="--", linewidth=1.0, alpha=0.8)
+        ymax = ax.get_ylim()[1]
+        ax.text(safe_val, ymax * 0.98, f"{pct}%", rotation=90, va="top", ha="right", fontsize=8, color="tab:red")
+
+    fig.tight_layout()
+    _ensure_output_parent(output_path)
+    try:
+        fig.savefig(output_path)
+    except OSError as exc:
+        raise ValueError(f"failed to write plot image '{output_path}': {exc}") from exc
+    finally:
+        plt.close(fig)
+
+
+def prepare_scores_for_log_x_axis(scores: np.ndarray) -> Tuple[np.ndarray, float]:
+    finite_scores = np.asarray(scores, dtype=np.float64)
+    finite_scores = finite_scores[np.isfinite(finite_scores)]
+    if finite_scores.size == 0:
+        raise ValueError("no finite heuristic scores available to plot")
+
+    finite_scores[finite_scores < 1.0] = 1.0
+    return finite_scores, 1.0
 
 
 def make_replaced_mask(replaced: Dict[int, List[int]], n_layer_total: int, n_expert: int) -> np.ndarray:
@@ -512,6 +644,12 @@ def main() -> int:
         raise ValueError("no layers selected")
 
     n_layer_total = max(int(np.max(layer_ids)) + 1, max(layers) + 1)
+    if args.plot_heuristic:
+        usage_scores = compute_usage_scores(topk_ids=topk_ids, layer_ids=layer_ids, layers=layers, n_expert=n_expert)
+        plot_out = default_plot_output_path(args)
+        plot_heuristic_scores_histogram(usage_scores, layers=layers, output_path=plot_out)
+        print(f"wrote heuristic plot: {plot_out}")
+        return 0
 
     if args.replaced_experts_json is not None:
         replaced = load_replaced_experts_json(args.replaced_experts_json, layers, n_expert)

@@ -26,6 +26,56 @@ def load_builder_module():
 
 
 class TestBuildMoeLookup(unittest.TestCase):
+    def test_compute_usage_scores_counts_per_layer(self):
+        mod = load_builder_module()
+
+        layer_ids = np.asarray([0, 0, 1], dtype=np.int32)
+        topk_ids = np.asarray([[0, 2], [2, 3], [1, 3]], dtype=np.int32)
+
+        usage = mod.compute_usage_scores(
+            topk_ids=topk_ids,
+            layer_ids=layer_ids,
+            layers=[0, 1],
+            n_expert=4,
+        )
+
+        np.testing.assert_array_equal(usage[0], np.asarray([1, 0, 2, 1], dtype=np.int64))
+        np.testing.assert_array_equal(usage[1], np.asarray([0, 1, 0, 1], dtype=np.int64))
+
+    def test_prepare_scores_for_log_x_axis_clamps_zeros(self):
+        mod = load_builder_module()
+
+        raw = np.asarray([0.0, 0.0, 2.0, 5.0], dtype=np.float64)
+        safe, floor = mod.prepare_scores_for_log_x_axis(raw)
+
+        self.assertGreater(floor, 0.0)
+        self.assertTrue(np.all(safe > 0.0))
+        self.assertEqual(float(safe[2]), 2.0)
+        self.assertEqual(float(safe[3]), 5.0)
+
+    def test_validate_args_allows_plot_mode_without_output(self):
+        mod = load_builder_module()
+        args = mod.argparse.Namespace(
+            output=None,
+            plot_heuristic=True,
+            clusters_per_layer=1,
+            kmeans_iters=1,
+            distance_batch_size=1,
+        )
+        mod.validate_args(args)
+
+    def test_validate_args_requires_output_without_plot_mode(self):
+        mod = load_builder_module()
+        args = mod.argparse.Namespace(
+            output=None,
+            plot_heuristic=False,
+            clusters_per_layer=1,
+            kmeans_iters=1,
+            distance_batch_size=1,
+        )
+        with self.assertRaisesRegex(ValueError, "--output is required"):
+            mod.validate_args(args)
+
     def test_removed_relative_contribution_zero_when_no_removed(self):
         mod = load_builder_module()
 
@@ -125,6 +175,61 @@ class TestBuildMoeLookup(unittest.TestCase):
                 self.assertIn("layer_0_contributions", npz.files)
                 self.assertNotIn("layer_0_residuals", npz.files)
                 self.assertEqual(str(npz["scaling_mode"]), "s_missing")
+
+    def test_cli_plot_heuristic_writes_image_without_lookup_outputs(self):
+        if importlib.util.find_spec("matplotlib") is None:
+            self.skipTest("matplotlib is not available")
+
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            trace_path = tmp / "trace.npz"
+            plot_path = tmp / "heuristic.png"
+
+            np.savez_compressed(
+                trace_path,
+                layer_ids=np.asarray([0, 0, 1], dtype=np.int32),
+                token_ids=np.asarray([0, 1, 2], dtype=np.int32),
+                h_pre_moe=np.asarray([[1.0, 0.0], [0.0, 1.0], [0.5, 0.5]], dtype=np.float16),
+                topk_ids=np.asarray([[0, 1], [1, 2], [2, 3]], dtype=np.int32),
+                topk_weights=np.asarray([[0.7, 0.3], [0.4, 0.6], [0.5, 0.5]], dtype=np.float16),
+                topk_expert_outputs=np.asarray(
+                    [
+                        [[1.0, 10.0], [2.0, 20.0]],
+                        [[3.0, 30.0], [4.0, 40.0]],
+                        [[5.0, 50.0], [6.0, 60.0]],
+                    ],
+                    dtype=np.float16,
+                ),
+            )
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT_PATH),
+                    "--input",
+                    str(trace_path),
+                    "--plot-heuristic",
+                    "--plot-output",
+                    str(plot_path),
+                ],
+                check=True,
+            )
+
+            self.assertTrue(plot_path.exists())
+
+    def test_prepare_matplotlib_import_path_evicts_mpl_toolkits_modules(self):
+        mod = load_builder_module()
+
+        sys.modules["mpl_toolkits"] = object()  # type: ignore[assignment]
+        sys.modules["mpl_toolkits.mplot3d"] = object()  # type: ignore[assignment]
+
+        try:
+            mod._prepare_matplotlib_import_path()
+            self.assertNotIn("mpl_toolkits", sys.modules)
+            self.assertNotIn("mpl_toolkits.mplot3d", sys.modules)
+        finally:
+            sys.modules.pop("mpl_toolkits", None)
+            sys.modules.pop("mpl_toolkits.mplot3d", None)
 
 
 if __name__ == "__main__":

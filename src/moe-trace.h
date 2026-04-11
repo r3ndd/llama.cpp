@@ -144,6 +144,27 @@ inline bool llama_moe_trace_validate_topk_expert_outputs(
     return true;
 }
 
+inline bool llama_moe_trace_validate_expected_topk(
+        int traced_n_topk,
+        int expected_n_topk,
+        std::string * err_msg = nullptr) {
+    if (traced_n_topk <= 0 || expected_n_topk <= 0) {
+        if (err_msg) {
+            *err_msg = "invalid top-k width";
+        }
+        return false;
+    }
+
+    if (traced_n_topk != expected_n_topk) {
+        if (err_msg) {
+            *err_msg = "top-k width does not match model n_expert_used";
+        }
+        return false;
+    }
+
+    return true;
+}
+
 class llama_moe_trace_writer {
 public:
     llama_moe_trace_writer(const llama_model & model, const std::string & output_path);
