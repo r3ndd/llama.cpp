@@ -17,6 +17,7 @@ struct ggml_context;
 struct ggml_tensor;
 
 struct llama_cparams;
+class llama_moe_lookup_table;
 
 struct llama_memory_context_i;
 
@@ -567,6 +568,8 @@ struct llm_graph_params {
 
     llm_graph_result * res;
 
+    const llama_moe_lookup_table * moe_lookup = nullptr;
+
     // return true if the "other" params would result in a graph with the same topology as with the current params
     //   having the same topology allows us to reuse the graph in some cases
     bool allow_reuse(const llm_graph_params & other) const {
@@ -629,7 +632,8 @@ struct llm_graph_params {
             gtype == other.gtype &&
             cvec  == other.cvec  &&
             loras == other.loras &&
-            cross == other.cross;
+            cross == other.cross &&
+            moe_lookup == other.moe_lookup;
     }
 };
 
@@ -757,6 +761,7 @@ struct llm_graph_context {
     const llm_graph_cb & cb_func;
 
     llm_graph_result * res;
+    const llama_moe_lookup_table * moe_lookup;
 
     ggml_context * ctx0 = nullptr;
     ggml_cgraph  * gf   = nullptr;

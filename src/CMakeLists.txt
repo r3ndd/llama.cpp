@@ -27,6 +27,7 @@ add_library(llama
             llama-memory-hybrid-iswa.cpp
             llama-memory-recurrent.cpp
             llama-mmap.cpp
+            moe-lookup.cpp
             moe-trace.cpp
             llama-model-loader.cpp
             llama-model-saver.cpp

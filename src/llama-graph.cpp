@@ -3,6 +3,7 @@
 #include "llama-impl.h"
 #include "llama-batch.h"
 #include "llama-cparams.h"
+#include "moe-lookup.h"
 
 #include "llama-kv-cache.h"
 #include "llama-kv-cache-iswa.h"
@@ -18,6 +19,29 @@
 #include <unordered_set>
 
 // dedup helpers
+
+class llm_graph_input_static_tensor final : public llm_graph_input_i {
+public:
+    llm_graph_input_static_tensor(ggml_tensor * tensor, std::vector<uint8_t> bytes)
+        : tensor(tensor), bytes(std::move(bytes)) {}
+
+    void set_input(const llama_ubatch * ubatch) override {
+        GGML_UNUSED(ubatch);
+        if (tensor == nullptr || bytes.empty()) {
+            return;
+        }
+        ggml_backend_tensor_set(tensor, bytes.data(), 0, bytes.size());
+    }
+
+    bool can_reuse(const llm_graph_params & params) override {
+        GGML_UNUSED(params);
+        return true;
+    }
+
+private:
+    ggml_tensor * tensor = nullptr;
+    std::vector<uint8_t> bytes;
+};
 
 static ggml_tensor * build_attn_inp_kq_mask(
         ggml_context * ctx,
@@ -948,6 +972,7 @@ llm_graph_context::llm_graph_context(const llm_graph_params & params) :
     samplers         (params.samplers),
     cb_func          (params.cb),
     res              (params.res),
+    moe_lookup       (params.moe_lookup),
     ctx0             (res->get_ctx()),
     gf               (res->get_gf()) {
         res->set_params(params);
@@ -1292,6 +1317,7 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
     const int64_t n_embd   = cur->ne[0];
     const int64_t n_tokens = cur->ne[1];
     const bool weight_before_ffn = arch == LLM_ARCH_LLAMA4; // for llama4, we apply the sigmoid-ed weights before the FFN
+    ggml_tensor * h_pre_moe = cur;
 
     if (cparams.moe_trace_enable && arch == LLM_ARCH_QWEN35MOE) {
         cb(cur, "ffn_moe_h_pre", il);
@@ -1374,10 +1400,64 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
         cb(selection_probs, "ffn_moe_probs_masked", il);
     }
 
-    // select experts
+    // select experts (baseline top-k, used for tracing and missing-mass lookup scaling)
     ggml_tensor * selected_experts = ggml_argsort_top_k(ctx0, selection_probs, n_expert_used); // [n_expert_used, n_tokens]
     cb(selected_experts->src[0], "ffn_moe_argsort", il);
     cb(selected_experts, "ffn_moe_topk", il);
+
+    ggml_tensor * selected_experts_routed = selected_experts;
+
+    const llama_moe_lookup_layer * lookup_layer = nullptr;
+    bool use_lookup_layer = false;
+    if (cparams.moe_lookup_enable && moe_lookup && arch == LLM_ARCH_QWEN35MOE && il >= 0) {
+        lookup_layer = moe_lookup->layer((uint32_t) il);
+        if (lookup_layer) {
+            use_lookup_layer = std::any_of(
+                lookup_layer->replaced_mask.begin(),
+                lookup_layer->replaced_mask.end(),
+                [](uint8_t v) { return v != 0; });
+        }
+    }
+
+    ggml_tensor * replaced_mask_3d = nullptr;
+    if (use_lookup_layer) {
+        std::vector<float> replace_bias((size_t) n_expert, 0.0f);
+        std::vector<float> replace_mask((size_t) n_expert, 0.0f);
+        bool has_replaced = false;
+        for (int64_t ie = 0; ie < n_expert; ++ie) {
+            if (lookup_layer->replaced_mask[(size_t) ie] != 0) {
+                replace_bias[(size_t) ie] = -1e9f;
+                replace_mask[(size_t) ie] = 1.0f;
+                has_replaced = true;
+            }
+        }
+
+        if (has_replaced) {
+            ggml_tensor * replace_bias_t = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, n_expert, 1);
+            GGML_ASSERT(replace_bias_t != nullptr);
+            std::vector<uint8_t> replace_bias_bytes(replace_bias.size() * sizeof(float));
+            std::memcpy(replace_bias_bytes.data(), replace_bias.data(), replace_bias_bytes.size());
+            res->add_input(std::make_unique<llm_graph_input_static_tensor>(replace_bias_t, std::move(replace_bias_bytes)));
+            ggml_set_input(replace_bias_t);
+            ggml_set_name(replace_bias_t, "ffn_moe_lookup_replaced_bias");
+
+            replaced_mask_3d = ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, 1, n_expert, 1);
+            GGML_ASSERT(replaced_mask_3d != nullptr);
+            std::vector<uint8_t> replace_mask_bytes(replace_mask.size() * sizeof(float));
+            std::memcpy(replace_mask_bytes.data(), replace_mask.data(), replace_mask_bytes.size());
+            res->add_input(std::make_unique<llm_graph_input_static_tensor>(replaced_mask_3d, std::move(replace_mask_bytes)));
+            ggml_set_input(replaced_mask_3d);
+            ggml_set_name(replaced_mask_3d, "ffn_moe_lookup_replaced_mask");
+
+            ggml_tensor * selection_probs_routed = ggml_add(ctx0, selection_probs, replace_bias_t);
+            cb(selection_probs_routed, "ffn_moe_probs_lookup_masked", il);
+
+            selected_experts_routed = ggml_argsort_top_k(ctx0, selection_probs_routed, n_expert_used); // [n_expert_used, n_tokens]
+            cb(selected_experts_routed, "ffn_moe_topk_routed", il);
+        } else {
+            use_lookup_layer = false;
+        }
+    }
 
     if (arch == LLM_ARCH_GROVEMOE && n_expert != hparams.n_expert) {
         // TODO: Use scalar div instead when/if implemented
@@ -1388,11 +1468,28 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
         probs = ggml_reshape_3d(ctx0, probs, 1, n_expert, n_tokens);
     }
 
-    ggml_tensor * weights = ggml_get_rows(ctx0, probs, selected_experts); // [1, n_expert_used, n_tokens]
-    cb(weights, "ffn_moe_weights", il);
+    if (!use_lookup_layer) {
+        selected_experts_routed = selected_experts;
+    }
+
+    ggml_tensor * weights_base = ggml_get_rows(ctx0, probs, selected_experts); // [1, n_expert_used, n_tokens]
+    cb(weights_base, "ffn_moe_weights", il);
+
+    ggml_tensor * weights = weights_base;
+    if (selected_experts_routed != selected_experts) {
+        weights = ggml_get_rows(ctx0, probs, selected_experts_routed); // [1, n_expert_used, n_tokens]
+        cb(weights, "ffn_moe_weights_routed", il);
+    }
 
 
     if (gating_op == LLAMA_EXPERT_GATING_FUNC_TYPE_SOFTMAX_WEIGHT) {
+        if (weights_base != weights) {
+            weights_base = ggml_reshape_2d(ctx0, weights_base, n_expert_used, n_tokens);
+            weights_base = ggml_soft_max(ctx0, weights_base); // [n_expert_used, n_tokens]
+            weights_base = ggml_reshape_3d(ctx0, weights_base, 1, n_expert_used, n_tokens);
+            cb(weights_base, "ffn_moe_weights_softmax_base", il);
+        }
+
         weights = ggml_reshape_2d(ctx0, weights, n_expert_used, n_tokens);
         weights = ggml_soft_max(ctx0, weights); // [n_expert_used, n_tokens]
         weights = ggml_reshape_3d(ctx0, weights, 1, n_expert_used, n_tokens);
@@ -1400,6 +1497,20 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
     }
 
     if (norm_w) {
+        if (weights_base != weights) {
+            weights_base = ggml_reshape_2d(ctx0, weights_base, n_expert_used, n_tokens);
+            ggml_tensor * weights_base_sum = ggml_sum_rows(ctx0, weights_base); // [1, n_tokens]
+            cb(weights_base_sum, "ffn_moe_weights_sum_base", il);
+
+            weights_base_sum = ggml_clamp(ctx0, weights_base_sum, 6.103515625e-5, INFINITY);
+            cb(weights_base_sum, "ffn_moe_weights_sum_clamped_base", il);
+
+            weights_base = ggml_div(ctx0, weights_base, weights_base_sum); // [n_expert_used, n_tokens]
+            cb(weights_base, "ffn_moe_weights_norm_base", il);
+
+            weights_base = ggml_reshape_3d(ctx0, weights_base, 1, n_expert_used, n_tokens);
+        }
+
         weights = ggml_reshape_2d(ctx0, weights, n_expert_used, n_tokens);
 
         ggml_tensor * weights_sum = ggml_sum_rows(ctx0, weights); // [1, n_tokens]
@@ -1415,6 +1526,11 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
         weights = ggml_reshape_3d(ctx0, weights, 1, n_expert_used, n_tokens);
     }
     if (w_scale != 0.0f && w_scale != 1.0f) {
+        if (weights_base != weights) {
+            weights_base = ggml_scale(ctx0, weights_base, w_scale);
+            cb(weights_base, "ffn_moe_weights_scaled_base", il);
+        }
+
         weights = ggml_scale(ctx0, weights, w_scale);
         cb(weights, "ffn_moe_weights_scaled", il);
     }
@@ -1436,11 +1552,11 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
 
     if (gate_up_exps) {
         // merged gate_up path: one mul_mat_id, then split into gate and up views
-        ggml_tensor * gate_up = build_lora_mm_id(gate_up_exps, cur, selected_experts); // [n_ff*2, n_expert_used, n_tokens]
+        ggml_tensor * gate_up = build_lora_mm_id(gate_up_exps, cur, selected_experts_routed); // [n_ff*2, n_expert_used, n_tokens]
         cb(gate_up, "ffn_moe_gate_up", il);
 
         if (gate_up_exps_b) {
-            gate_up = ggml_add_id(ctx0, gate_up, gate_up_exps_b, selected_experts);
+            gate_up = ggml_add_id(ctx0, gate_up, gate_up_exps_b, selected_experts_routed);
             cb(gate_up, "ffn_moe_gate_up_biased", il);
         }
 
@@ -1448,7 +1564,7 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
         if (up_exps_s) {
             ggml_tensor * s = ggml_reshape_3d(ctx0, up_exps_s, 1, n_expert, 1);
             s = ggml_repeat_4d(ctx0, s, 1, n_expert, n_tokens, 1);
-            s = ggml_get_rows(ctx0, s, selected_experts); // [1, n_expert_used, n_tokens]
+            s = ggml_get_rows(ctx0, s, selected_experts_routed); // [1, n_expert_used, n_tokens]
             gate_up = ggml_mul(ctx0, gate_up, s);
             cb(gate_up, "ffn_moe_gate_up_scaled", il);
         }
@@ -1460,11 +1576,11 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
         cb(up, "ffn_moe_up", il);
     } else {
         // separate gate and up path
-        up = build_lora_mm_id(up_exps, cur, selected_experts); // [n_ff, n_expert_used, n_tokens]
+        up = build_lora_mm_id(up_exps, cur, selected_experts_routed); // [n_ff, n_expert_used, n_tokens]
         cb(up, "ffn_moe_up", il);
 
         if (up_exps_b) {
-            up = ggml_add_id(ctx0, up, up_exps_b, selected_experts);
+            up = ggml_add_id(ctx0, up, up_exps_b, selected_experts_routed);
             cb(up, "ffn_moe_up_biased", il);
         }
 
@@ -1472,20 +1588,20 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
         if (up_exps_s) {
             ggml_tensor * s = ggml_reshape_3d(ctx0, up_exps_s, 1, n_expert, 1);
             s = ggml_repeat_4d(ctx0, s, 1, n_expert, n_tokens, 1);
-            s = ggml_get_rows(ctx0, s, selected_experts); // [1, n_expert_used, n_tokens]
+            s = ggml_get_rows(ctx0, s, selected_experts_routed); // [1, n_expert_used, n_tokens]
             up = ggml_mul(ctx0, up, s);
             cb(up, "ffn_moe_up_scaled", il);
         }
 
         if (gate_exps) {
-            cur = build_lora_mm_id(gate_exps, cur, selected_experts); // [n_ff, n_expert_used, n_tokens]
+            cur = build_lora_mm_id(gate_exps, cur, selected_experts_routed); // [n_ff, n_expert_used, n_tokens]
             cb(cur, "ffn_moe_gate", il);
         } else {
             cur = up;
         }
 
         if (gate_exps_b) {
-            cur = ggml_add_id(ctx0, cur, gate_exps_b, selected_experts);
+            cur = ggml_add_id(ctx0, cur, gate_exps_b, selected_experts_routed);
             cb(cur, "ffn_moe_gate_biased", il);
         }
 
@@ -1493,7 +1609,7 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
         if (gate_exps_s) {
             ggml_tensor * s = ggml_reshape_3d(ctx0, gate_exps_s, 1, n_expert, 1);
             s = ggml_repeat_4d(ctx0, s, 1, n_expert, n_tokens, 1);
-            s = ggml_get_rows(ctx0, s, selected_experts); // [1, n_expert_used, n_tokens]
+            s = ggml_get_rows(ctx0, s, selected_experts_routed); // [1, n_expert_used, n_tokens]
             cur = ggml_mul(ctx0, cur, s);
             cb(cur, "ffn_moe_gate_scaled", il);
         }
@@ -1568,11 +1684,11 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
             GGML_ABORT("fatal error");
     }
 
-    experts = build_lora_mm_id(down_exps, cur, selected_experts); // [n_embd, n_expert_used, n_tokens]
+    experts = build_lora_mm_id(down_exps, cur, selected_experts_routed); // [n_embd, n_expert_used, n_tokens]
     cb(experts, "ffn_moe_down", il);
 
     if (down_exps_b) {
-        experts = ggml_add_id(ctx0, experts, down_exps_b, selected_experts);
+        experts = ggml_add_id(ctx0, experts, down_exps_b, selected_experts_routed);
         cb(experts, "ffn_moe_down_biased", il);
     }
 
@@ -1580,7 +1696,7 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
     if (down_exps_s) {
         ggml_tensor * s = ggml_reshape_3d(ctx0, down_exps_s, 1, n_expert, 1);
         s = ggml_repeat_4d(ctx0, s, 1, n_expert, n_tokens, 1);
-        s = ggml_get_rows(ctx0, s, selected_experts); // [1, n_expert_used, n_tokens]
+        s = ggml_get_rows(ctx0, s, selected_experts_routed); // [1, n_expert_used, n_tokens]
         experts = ggml_mul(ctx0, experts, s);
         cb(experts, "ffn_moe_down_scaled", il);
     }
@@ -1621,6 +1737,60 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
     }
 
     cb(moe_out, "ffn_moe_out", il);
+
+    if (use_lookup_layer && replaced_mask_3d) {
+        // mandatory s_missing scaling uses baseline selected top-k router weights
+        ggml_tensor * missing_flags = ggml_get_rows(ctx0, replaced_mask_3d, selected_experts); // [1, n_expert_used, n_tokens]
+        cb(missing_flags, "ffn_moe_lookup_missing_flags", il);
+
+        ggml_tensor * missing_weights = ggml_mul(ctx0, weights_base, missing_flags); // [1, n_expert_used, n_tokens]
+        cb(missing_weights, "ffn_moe_lookup_missing_weights", il);
+
+        ggml_tensor * s_missing = ggml_sum_rows(ctx0, ggml_reshape_2d(ctx0, missing_weights, n_expert_used, n_tokens)); // [1, n_tokens]
+        cb(s_missing, "ffn_moe_lookup_s_missing", il);
+
+        const int64_t n_keys = (int64_t) lookup_layer->n_keys;
+
+        ggml_tensor * centroids = ggml_new_tensor_2d(ctx0, GGML_TYPE_F16, n_embd, n_keys);
+        GGML_ASSERT(centroids != nullptr);
+        std::vector<uint8_t> centroids_bytes(lookup_layer->centroids.size() * sizeof(ggml_fp16_t));
+        std::memcpy(centroids_bytes.data(), lookup_layer->centroids.data(), centroids_bytes.size());
+        res->add_input(std::make_unique<llm_graph_input_static_tensor>(centroids, std::move(centroids_bytes)));
+        ggml_set_input(centroids);
+
+        ggml_tensor * contributions = ggml_new_tensor_2d(ctx0, GGML_TYPE_F16, n_embd, n_keys);
+        GGML_ASSERT(contributions != nullptr);
+        std::vector<uint8_t> contributions_bytes(lookup_layer->contributions.size() * sizeof(ggml_fp16_t));
+        std::memcpy(contributions_bytes.data(), lookup_layer->contributions.data(), contributions_bytes.size());
+        res->add_input(std::make_unique<llm_graph_input_static_tensor>(contributions, std::move(contributions_bytes)));
+        ggml_set_input(contributions);
+
+        ggml_tensor * centroid_norm = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, n_keys, 1);
+        GGML_ASSERT(centroid_norm != nullptr);
+        std::vector<uint8_t> centroid_norm_bytes(lookup_layer->centroid_l2_sq.size() * sizeof(float));
+        std::memcpy(centroid_norm_bytes.data(), lookup_layer->centroid_l2_sq.data(), centroid_norm_bytes.size());
+        res->add_input(std::make_unique<llm_graph_input_static_tensor>(centroid_norm, std::move(centroid_norm_bytes)));
+        ggml_set_input(centroid_norm);
+
+        ggml_tensor * h_sq = ggml_sum_rows(ctx0, ggml_sqr(ctx0, h_pre_moe)); // [1, n_tokens]
+        ggml_tensor * c_dot_h = ggml_mul_mat(ctx0, centroids, h_pre_moe); // [n_keys, n_tokens]
+        ggml_tensor * dist = ggml_add(ctx0, ggml_add(ctx0, ggml_scale(ctx0, c_dot_h, -2.0f), centroid_norm), h_sq); // [n_keys, n_tokens]
+        cb(dist, "ffn_moe_lookup_dist", il);
+
+        ggml_tensor * nearest = ggml_argsort_top_k(ctx0, ggml_scale(ctx0, dist, -1.0f), 1); // [1, n_tokens]
+        cb(nearest, "ffn_moe_lookup_key", il);
+
+        ggml_tensor * contrib_3d = ggml_reshape_3d(ctx0, contributions, n_embd, n_keys, 1);
+        ggml_tensor * lookup = ggml_get_rows(ctx0, contrib_3d, nearest); // [n_embd, 1, n_tokens]
+        lookup = ggml_reshape_2d(ctx0, lookup, n_embd, n_tokens);
+        cb(lookup, "ffn_moe_lookup_u", il);
+
+        ggml_tensor * lookup_scaled = ggml_mul(ctx0, lookup, s_missing); // [n_embd, n_tokens]
+        cb(lookup_scaled, "ffn_moe_lookup_scaled", il);
+
+        moe_out = ggml_add(ctx0, moe_out, lookup_scaled);
+        cb(moe_out, "ffn_moe_out_lookup", il);
+    }
 
     return moe_out;
 }

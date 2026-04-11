@@ -16,6 +16,7 @@
 struct llama_model;
 class llama_batch_allocr;
 class llama_moe_trace_writer;
+class llama_moe_lookup_table;
 
 class llama_io_read_i;
 class llama_io_write_i;
@@ -354,6 +355,7 @@ private:
     bool has_evaluated_once = false;
 
     std::unique_ptr<llama_moe_trace_writer> moe_trace_writer;
+    std::unique_ptr<llama_moe_lookup_table> moe_lookup_table;
 
     // env: LLAMA_GRAPH_REUSE_DISABLE
     bool graph_reuse_disable = false;

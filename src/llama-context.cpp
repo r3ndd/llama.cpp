@@ -8,6 +8,7 @@
 #include "llama-mmap.h"
 #include "llama-model.h"
 #include "llama-ext.h"
+#include "moe-lookup.h"
 #include "moe-trace.h"
 
 #include <cinttypes>
@@ -222,7 +223,26 @@ llama_context::llama_context(
     }
 
     if (cparams.moe_lookup_enable) {
-        LLAMA_LOG_WARN("%s: experimental --moe-lookup-enable is accepted for Qwen3.5-MoE, but runtime lookup is not wired in this stage; using baseline MoE path\n", __func__);
+        std::string lookup_warning;
+        this->moe_lookup_table = llama_moe_lookup_table::load(model, cparams, lookup_warning);
+        if (!this->moe_lookup_table || !this->moe_lookup_table->valid()) {
+            if (!lookup_warning.empty()) {
+                LLAMA_LOG_WARN("%s: disabling MoE lookup: %s\n", __func__, lookup_warning.c_str());
+            } else {
+                LLAMA_LOG_WARN("%s: disabling MoE lookup: failed to load sidecar\n", __func__);
+            }
+            this->moe_lookup_table.reset();
+            cparams.moe_lookup_enable = false;
+        } else if (!this->moe_lookup_table->has_any_active_layers()) {
+            LLAMA_LOG_WARN("%s: disabling MoE lookup: sidecar has no active layer payloads\n", __func__);
+            this->moe_lookup_table.reset();
+            cparams.moe_lookup_enable = false;
+        } else {
+            if (!lookup_warning.empty()) {
+                LLAMA_LOG_WARN("%s: MoE lookup loaded with warnings: %s\n", __func__, lookup_warning.c_str());
+            }
+            LLAMA_LOG_WARN("%s: experimental MoE lookup enabled (format_version=%u)\n", __func__, this->moe_lookup_table->format_version());
+        }
     }
 
     eval_cb_payload.user_cb = params.cb_eval;
@@ -2237,6 +2257,7 @@ llm_graph_params llama_context::graph_params(
         /*.n_outputs   =*/ n_outputs,
         /*.cb          =*/ graph_get_cb(),
         /*.res         =*/ res,
+        /*.moe_lookup  =*/ this->moe_lookup_table.get(),
     };
 }
 

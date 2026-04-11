@@ -238,6 +238,10 @@ llama_build(test-moe-trace.cpp)
 target_link_libraries(test-moe-trace PRIVATE llama)
 llama_test(test-moe-trace)
 
+llama_build(test-moe-lookup.cpp)
+target_link_libraries(test-moe-lookup PRIVATE llama)
+llama_test(test-moe-lookup)
+
 if (Python3_Interpreter_FOUND)
     llama_test_cmd(
         ${CMAKE_COMMAND}
