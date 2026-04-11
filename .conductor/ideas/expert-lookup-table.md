@@ -8,17 +8,17 @@ In "training", I would run inference on the model for a variety of prompts, trac
 To replace an expert, there are two algorithms I am considering. In both cases, the input to the top-k experts would be mapped to a discrete set of keys per layer using k-means clustering, and then the outputs would be averaged in a lookup table at those keys.
 
 ### Algorithm 1: Unique Table per Expert
-In this algorithm, each expert would have its own lookup table, with its own unique keys derived through k-means clustering from when that expert is in the top-k for a token. Since having a lookup table for every expert would consume a lot of storage, experts would need to be trained in small batches and their final saved output vectors would be binary vectors of the average (after Hadamard transform).
+In this algorithm, each removed expert would have its own lookup table, with its own unique keys derived through k-means clustering from when that expert is in the top-k for a token. Since having a lookup table for every expert would consume a lot of storage, experts would need to be trained in small batches and their final saved output vectors would be binary vectors of the average (after Hadamard transform).
 
 ### Algorithm 2: Shared Table per Layer
 In this algorithm, all experts within a layer would share the same lookup table, with keys derived in the same way as in Algorithm 1 but with them being the same for all experts.
-However, the output would be the difference vector between the original combined output of the experts and the output if the replaced expert(s) were removed (and lower-ranked experts were used in their place). This is a little more computationally expensive during training because it requires running inference on more experts.
+However, the output of the table would be the weighted, combined output of the removed top-k experts.
 
 
 ## Inference
 During inference, the modified llama.cpp would use the lookup tables to replace the computation of the selected experts.
 For Algorithm 1, the top-k experts that were not replaced would be computed as usual (including the next best not replaced experts for k total computed), while any replaced top-k experts would have their output computed by looking up the corresponding key in their unique lookup table, doing the inverse Hadamard transform, and then combining all expert outputs as usual (weighted by router's scores).
-For Algorithm 2, the top-k experts that were not replaced would be computed as usual (along with the next best not replaced experts for k total computed), while any replaced top-k experts would have their output computed by looking up the corresponding key in the shared lookup table, doing the inverse Hadamard transform, and then adding the difference vector to the combined output of the non-replaced experts. The computed experts' outputs would be weighted by the router's scores as usual, and the difference vector would be weighted by the router's relative scores for the missing top-k experts (assuming the loaded vector is the output of the missing top-k experts).
+For Algorithm 2, the top-k experts that were not replaced would be computed as usual (along with the next best not replaced experts for k total computed), while any replaced top-k experts would have their output determined by looking up the corresponding key in the shared lookup table and then adding it to the combined output of the non-replaced experts. The computed experts' outputs would be weighted by the router's scores as usual, and the loaded output would be weighted by the router's net score for the missing top-k experts.
 
 ## Conclusion
 The core advantage of this approach, if it works, is that it would allow for the parameters of large models to be loaded entirely into memory, while still preserving learned expert knowledge and routing behavior. Increasing the size of the lookup tables would improve the performance at a given number of replaced experts, while only increasing storage requirements and not affecting inference time (constant time lookups). Since storage is cheaper than both memory and compute, this could be a good tradeoff.

@@ -38,7 +38,7 @@ We agreed to start with a narrow but high-signal prototype:
 
 ## 3) Hypotheses to Test
 
-H1. Replacing a subset of routed experts with a **shared per-layer lookup residual** (Algorithm 2) can preserve quality within <=2 ppl delta at modest replacement ratios.
+H1. Replacing a subset of routed experts with a **shared per-layer lookup of removed-expert contribution prototypes** (Algorithm 2, revised) can preserve quality within <=2 ppl delta at modest replacement ratios.
 
 H2. Layer-input hidden-state clustering is a sufficient keying mechanism to approximate missing expert contribution for a first PoC.
 
@@ -65,31 +65,38 @@ H3. For mixed CPU+GPU offload setups, lookup substitution can reduce effective M
 
 ---
 
-## 5) Algorithm 2 PoC Mechanics (concrete)
+## 5) Algorithm 2 PoC Mechanics (concrete, revised)
+
+> **Superseded definition (old):** table stored average residual `r = y_full - y_kept`.
+>
+> **Current definition (new):** table stores, per key, the average of a **removed-expert relative-weight mixture**; inference then scales by current missing top-k router mass.
 
 For each MoE layer `L`:
 
 1. Collect training tuples over prompt tokens:
-   - input hidden state `h_L` (pre-MoE input),
-   - top-k selected experts + weights,
-   - full MoE output `y_full`,
-   - reduced output `y_kept` (with replaced experts removed and next-best non-replaced experts filling top-k count),
-   - residual target `r = y_full - y_kept`.
+    - input hidden state `h_L` (pre-MoE input),
+    - top-k selected experts + weights,
+    - separate output vector for each selected top-k expert (before router weighting in final combine).
 
 2. Build shared key space:
-   - k-means clusters over `h_L` for that layer.
+    - k-means clusters over `h_L` for that layer.
 
 3. Build lookup table:
-   - For each cluster key `c`, store average residual `R_L[c] = mean(r)`.
+    - For each token/sample, define removed top-k set `M` using replacement policy.
+    - If `M` is empty, contribution target is zero vector.
+    - Else compute removed-expert relative-weight mixture:
+      - `u = sum_{e in M} (w_e / sum_{j in M} w_j) * y_e`
+      - where `w_e` are router scores of selected top-k experts and `y_e` are per-expert outputs.
+    - For each cluster key `c`, store `U_L[c] = mean(u)` over assigned samples.
 
 4. In inference (when replaced expert selected):
-   - compute regular MoE from non-replaced experts (with fallback next-best not-replaced experts to maintain k count),
-   - find key from `h_L`, retrieve `R_L[key]`,
-   - add scaled residual to combined MoE output.
+    - compute regular MoE from non-replaced experts (with fallback next-best not-replaced experts to maintain k count),
+    - find key from `h_L`, retrieve `U_L[key]`,
+    - compute current missing top-k router mass `s_missing = sum_{e in M_current} w_e`,
+    - add `s_missing * U_L[key]` to combined MoE output.
 
-5. Residual scaling option:
-   - weight residual by aggregate router mass that would have gone to replaced experts.
-   - Keep as configurable strategy in experiments.
+5. Zero-missing behavior:
+    - If no selected top-k experts are removed for a token, `s_missing = 0`, so lookup add is zero (equivalent to no contribution from table).
 
 ---
 
@@ -105,11 +112,12 @@ For each MoE layer `L`:
 ### Stage B — Trace capture (accuracy-first)
 - Capture exact tensors required for Algorithm 2 training data at MoE boundary.
 - Validate parity: traced selected experts/weights must match actual inference routing exactly.
+- Capture separate output vector for each selected top-k expert.
 - Add low-overhead mode and bounded buffering to reduce slowdown risk.
 
 ### Stage C — Offline table builder (external tool/script)
 - Consume trace files.
-- Perform layer-wise clustering + residual averaging.
+- Perform layer-wise clustering + removed-expert relative-weight mixture averaging.
 - Emit compact per-layer table artifact format.
 
 ### Stage D — Inference-time lookup substitution
@@ -127,11 +135,11 @@ For each MoE layer `L`:
 1. **Trace overhead too high**
    - Mitigate with sampling mode, binary format, and optional asynchronous flush.
 
-2. **Keying quality too weak** (hidden-state clusters underfit residuals)
+2. **Keying quality too weak** (hidden-state clusters underfit missing-expert contribution prototypes)
    - Mitigate by increasing table size or testing hybrid key later.
 
 3. **Router-weight interaction mismatch**
-   - Mitigate by testing multiple residual scaling formulas and calibrating on held-out traces.
+   - Mitigate by validating mandatory net-mass scaling (`s_missing`) and testing optional calibrated post-scale only if needed.
 
 4. **Generalization across prompt domains**
    - Mitigate by expanding prompt diversity once PoC passes initial gate.
@@ -163,11 +171,11 @@ Proposed NPZ payload (per run, per layer arrays):
 - `h_pre_moe` (float16) — pre-MoE hidden state used for keying
 - `topk_ids` (int16/int32)
 - `topk_weights` (float16)
-- `y_full` (float16) and/or `residual_target` (float16)
+- `topk_expert_outputs` (float16) — separate output for each selected top-k expert, shape `[N, k, n_embd]`
 - `replaced_mask` (bool) for analysis slices
 - metadata JSON side entry: model name, commit hash, n_expert_used, routing mode, prompt source
 
-Note: For strict overhead control, we can start by storing only the minimum required to reconstruct residuals offline (`h_pre_moe`, routing info, and outputs), then prune fields after profiling.
+Note: For strict overhead control, keep minimum fields required for revised Algorithm 2 target construction (`h_pre_moe`, `topk_ids`, `topk_weights`, `topk_expert_outputs`), then prune optional fields after profiling.
 
 ### 9.2 Runtime config surface (v1 decision)
 
@@ -184,9 +192,9 @@ Design rule:
 - Default-off experimental behavior.
 - If flags are absent or artifacts invalid, silently fall back to baseline MoE path (with clear warning log).
 
-### 9.3 Residual vector representation (v1 decision)
+### 9.3 Lookup contribution vector representation (v1 decision)
 
-**Decision:** Store residual vectors as **FP16** in v1.
+**Decision:** Store lookup contribution vectors as **FP16** in v1.
 
 Rationale:
 - Best early tradeoff between quality retention and artifact size.
@@ -194,7 +202,7 @@ Rationale:
 - Keeps numeric behavior closer to baseline during early validation.
 
 Deferred to v2:
-- INT8 residual quantization and/or transform-compressed variants after ppl gate is stable.
+- INT8 contribution-vector quantization and/or transform-compressed variants after ppl gate is stable.
 
 ### 9.4 Lookup table packaging (v1 decision)
 
@@ -225,4 +233,4 @@ Only then:
 
 1. Exact trace write policy for low-overhead mode (buffer sizing, flush cadence, async/threading model).
 2. Final sidecar file format for inference runtime (NPZ direct load vs compiled binary generated from NPZ).
-3. Residual scaling formula choice for Algorithm 2 in inference (raw add vs router-mass scaled vs calibrated).
+3. Whether to keep only mandated net-mass scaling (`s_missing`) or add optional calibrated post-scale for domain robustness.

@@ -8,13 +8,13 @@ Scope: `Qwen/Qwen3.5-35B-A3B` in llama.cpp runtime, mixed CPU+GPU offload, **Alg
 
 ## 1) Executive Summary
 
-This design introduces an **experimental, default-off Expert Lookup Table (ELT)** path for Qwen3.5-MoE in llama.cpp. The ELT path replaces selected routed experts with a **shared per-layer residual lookup** (Algorithm 2), using precomputed sidecar artifacts derived from trace data.
+This design introduces an **experimental, default-off Expert Lookup Table (ELT)** path for Qwen3.5-MoE in llama.cpp. The ELT path replaces selected routed experts with a **shared per-layer removed-expert contribution lookup** (Algorithm 2, revised), using precomputed sidecar artifacts derived from trace data.
 
 Phase 1 is intentionally narrow:
 - Qwen3.5-MoE only.
 - Shared table per layer (Algorithm 2).
 - Sidecar artifacts external to GGUF.
-- FP16 residual storage.
+- FP16 lookup contribution vector storage.
 - NPZ traces for offline training/build pipeline.
 
 Primary acceptance gate: **<= 2.0 perplexity delta** on a fixed WikiText-103 slice relative to baseline under matched runtime settings.
@@ -27,7 +27,7 @@ Primary acceptance gate: **<= 2.0 perplexity delta** on a fixed WikiText-103 sli
 2. **Model scope:** Stay **Qwen3.5-MoE only** until stability criteria are met.
 3. **Trace format v1:** Use **NPZ per run** for trace output.
 4. **Runtime config surface:** Use **CLI flags + file paths** (no env/config metadata dependency in v1).
-5. **Residual representation:** Store residual vectors as **FP16** in v1.
+5. **Vector representation:** Store lookup contribution vectors as **FP16** in v1.
 6. **Packaging:** Keep lookup data in **sidecar artifact(s)**, not GGUF, for PoC iteration speed.
 
 These decisions are treated as non-goals for this phase; alternatives are deferred to follow-up phases.
@@ -39,13 +39,13 @@ These decisions are treated as non-goals for this phase; alternatives are deferr
 ### Goals
 - Enable end-to-end ELT experimentation for Qwen3.5-MoE on mixed CPU+GPU offload.
 - Capture routing + hidden-state traces with exact routing correctness.
-- Execute inference-time replacement of selected experts via layer shared residual lookups.
+- Execute inference-time replacement of selected experts via layer shared removed-expert contribution lookups.
 - Provide robust fallback to baseline MoE behavior when ELT assets are missing/invalid.
 
 ### Non-Goals (Phase 1)
 - Multi-model support beyond Qwen3.5-MoE.
 - GGUF embedding of lookup tables.
-- INT8/Hadamard/binary residual compression.
+- INT8/Hadamard/binary contribution-vector compression.
 - Algorithm 1 (per-expert unique tables).
 - Autotuning replacement heuristics in runtime.
 
@@ -66,11 +66,11 @@ These decisions are treated as non-goals for this phase; alternatives are deferr
    - Emits NPZ traces containing per-token, per-layer data needed for offline ELT training.
 
 2. **Offline ELT Builder (external Python/tooling)**
-   - Consumes NPZ traces, runs k-means over `h_pre_moe` per layer, computes residual table values, and emits runtime sidecar artifact.
+   - Consumes NPZ traces, runs k-means over `h_pre_moe` per layer, computes removed-expert contribution prototype table values, and emits runtime sidecar artifact.
 
 3. **Runtime ELT Inference (llama.cpp)**
    - Loads sidecar + replacement policy.
-   - During MoE FFN, computes baseline from non-replaced experts and adds looked-up residual correction when applicable.
+   - During MoE FFN, computes baseline from non-replaced experts and adds looked-up missing-expert contribution correction when applicable.
 
 4. **Evaluation Harness**
    - Baseline vs ELT on fixed corpus slice with matched settings; compares ppl, throughput, and memory.
@@ -81,18 +81,19 @@ These decisions are treated as non-goals for this phase; alternatives are deferr
    - For each MoE layer token pass, capture:
      - `h_pre_moe`
      - top-k IDs and weights
-     - `y_full`
-     - optionally `y_kept` or enough data to reconstruct residual offline
+     - separate output of each selected top-k expert
 2. Save run trace to NPZ.
 3. Offline builder:
    - Rank/select replaced experts per layer using chosen heuristic.
    - Build shared cluster key space per layer.
-   - Compute residual target `r = y_full - y_kept`.
-   - Aggregate `R_L[key] = mean(r)` and emit sidecar.
+   - For each sample, construct removed-expert relative-weight mixture target:
+     - if removed set `M` is empty: target `u = 0`
+     - else: `u = sum_{e in M} (w_e / sum_{j in M} w_j) * y_e`
+   - Aggregate `U_L[key] = mean(u)` and emit sidecar.
 4. Inference with ELT enabled:
    - Determine routed experts.
    - Route only non-replaced experts (plus next-best non-replaced to maintain k).
-   - Lookup key from `h_pre_moe`, fetch residual, apply scaling strategy, add to layer output.
+   - Lookup key from `h_pre_moe`, fetch contribution prototype, scale by current missing top-k router net score, and add to layer output.
 
 ---
 
@@ -180,8 +181,7 @@ Required arrays (v1):
 - `h_pre_moe` (`float16`) — shape `[N, n_embd]`
 - `topk_ids` (`int16`/`int32`) — shape `[N, k]`
 - `topk_weights` (`float16`) — shape `[N, k]`
-- `y_full` (`float16`) — shape `[N, n_embd]`
-- optional `y_kept` (`float16`) or precomputed `residual_target` (`float16`)
+- `topk_expert_outputs` (`float16`) — separate output for each selected top-k expert, shape `[N, k, n_embd]`
 - optional `replaced_mask` (`bool`) for slice analysis
 
 Metadata JSON entry (embedded or adjacent):
@@ -214,13 +214,13 @@ v1 direction: start with **versioned sidecar header** and layer payload, while r
 - `n_layer` (u32)
 - `n_embd` (u32)
 - `k_per_layer` or cluster count map
-- `residual_dtype` (`fp16` in v1)
+- `vector_dtype` (`fp16` in v1)
 - `scaling_mode` enum
 
 ## 8.2 Per-layer payload
 - `layer_id`
 - key centroids: `C_L` shape `[n_keys_L, n_embd]` (`fp16` or `fp32` for distance stability; see unresolved items)
-- residual table: `R_L` shape `[n_keys_L, n_embd]` (`fp16`)
+- contribution prototype table: `U_L` shape `[n_keys_L, n_embd]` (`fp16`)
 - replaced expert set/list for layer (or external JSON if split retained in v1)
 
 ## 8.3 Strategy Choice for v1
@@ -234,7 +234,11 @@ Rationale:
 
 ---
 
-## 9) Inference Integration Path (Algorithm 2)
+## 9) Inference Integration Path (Algorithm 2, revised)
+
+> **Superseded (old):** lookup stored average residual and was added (optionally scaled).
+>
+> **Current (new):** lookup stores removed-expert relative-weight mixture prototypes `U_L[key]`; runtime applies mandatory scaling by current missing top-k router net score.
 
 For each token at MoE layer `L`:
 
@@ -244,19 +248,18 @@ For each token at MoE layer `L`:
    - `replaced` (configured replaced set)
 3. Fill compute set to maintain `k` using next-best non-replaced experts.
 4. Compute `y_kept` from actual expert MLP outputs + routing weights.
-5. If `replaced` is non-empty and ELT table exists for layer:
+5. Compute missing-set net router score:
+   - `s_missing = sum_{e in replaced} w_e`.
+6. If ELT table exists for layer:
    - derive key index from `h_pre_moe` via nearest centroid.
-   - load residual vector `R_L[key]`.
-   - compute scale factor `s` per scaling mode.
-   - output `y = y_kept + s * R_L[key]`.
-6. Else fallback: `y = y_kept` (baseline behavior with kept+filled experts).
+   - load contribution prototype vector `U_L[key]`.
+   - output `y = y_kept + s_missing * U_L[key]`.
+7. Else fallback: `y = y_kept` (baseline behavior with kept+filled experts).
 
-### Scaling modes (v1 experiments)
-- `none`: `s = 1.0`
-- `router_mass_replaced`: `s = sum(weights of replaced routed experts)`
-- `normalized_router_mass`: optional calibrated variant (deferred unless needed)
-
-Default mode for first implementation: `router_mass_replaced` (matches algorithm intuition and safer magnitude control).
+### Scaling behavior (v1)
+- Mandatory base scaling: `s_missing = sum(weights of removed selected top-k experts)`.
+- If no selected top-k experts are removed for this token, `s_missing = 0` and lookup add is exactly zero.
+- Optional calibrated post-scale remains an unresolved follow-up item (not required for first integration).
 
 ---
 
@@ -279,7 +282,7 @@ Failure modes and behavior:
    - Fast path baseline computations.
 
 5. **Key lookup numeric issue (NaN distance, invalid index)**
-   - Warn in debug; skip residual add for that token/layer.
+   - Warn in debug; skip lookup add for that token/layer.
 
 6. **Trace writer backpressure/flush failure**
    - Warn and drop trace rows (bounded-loss policy) rather than stall inference.
@@ -340,7 +343,7 @@ Dataset: fixed WikiText-103 slice.
 Matrix:
 - replacement ratio: 5%, 10%, 20%
 - keys/layer: 1k, 4k, 10k
-- scaling mode: `none`, `router_mass_replaced`
+- scaling: mandatory `s_missing` base scaling, plus optional calibrated post-scale ablation if introduced
 
 Acceptance gate:
 - At least one configuration achieves **<= 2.0 ppl delta** vs baseline.
@@ -362,6 +365,7 @@ Gate A:
 Deliverables:
 - NPZ trace writer v1 with required schema.
 - Routing parity checks.
+- Per-top-k expert output capture (`topk_expert_outputs`) validated for shape and token/layer alignment.
 
 Gate B:
 - 100% sampled parity pass for IDs/weights.
@@ -377,7 +381,7 @@ Gate C:
 
 ### Stage D — Runtime ELT substitution
 Deliverables:
-- Inference residual lookup integration in `build_moe_ffn(...)`.
+- Inference removed-expert contribution lookup integration in `build_moe_ffn(...)`.
 - Fallback logic for all known error modes.
 
 Gate D:
@@ -405,7 +409,7 @@ Gate E (promotion gate):
    - Chosen: sidecar.
    - Why: no GGUF schema changes in PoC; faster A/B iteration.
 
-3. **FP16 residuals vs aggressive compression**
+3. **FP16 contribution vectors vs aggressive compression**
    - Chosen: FP16.
    - Why: better quality preservation and simpler implementation for initial quality gate.
 
@@ -435,11 +439,11 @@ Gate E (promotion gate):
      - ease of schema evolution and validation safety.
    - Decision trigger: Stage C prototype benchmark and implementation effort.
 
-3. **Residual scaling formula finalization**
+3. **Scaling policy finalization beyond mandatory `s_missing`**
    - Criteria:
      - ppl delta impact across replacement ratios,
      - stability across prompt domains,
-     - robustness to router mass extremes.
+     - robustness to router mass extremes under mandatory net-mass scaling.
    - Decision trigger: Stage E matrix outcomes.
 
 4. **Centroid precision for key search (`fp16` vs `fp32`)**
@@ -464,13 +468,13 @@ Gate E (promotion gate):
    - Impact: slow data generation, impractical workflow.
    - Mitigation: bounded buffers, optional sampling, optional async flush.
 
-2. **Cluster keying underfits residual behavior**
+2. **Cluster keying underfits missing-expert contribution behavior**
    - Impact: perplexity regression beyond gate.
-   - Mitigation: larger key count, improved scaling mode, heuristic refinement.
+   - Mitigation: larger key count, heuristic refinement, and optional calibrated post-scale only if needed.
 
 3. **Router-mass scaling mismatch**
-   - Impact: unstable residual magnitude and quality variance.
-   - Mitigation: test multiple scaling modes with held-out validation.
+   - Impact: unstable lookup contribution magnitude and quality variance.
+   - Mitigation: keep mandatory `s_missing` baseline and test calibrated post-scale only if needed.
 
 4. **Mixed CPU+GPU integration complexity**
    - Impact: runtime regressions/crashes due to tensor placement/path assumptions.
@@ -500,7 +504,7 @@ After this gate, extract reusable MoE lookup interfaces around `build_moe_ffn(..
 - [x] Add Qwen-only activation guard.
 - [x] Implement trace hooks + NPZ writer v1.
 - [x] Implement parity assertions/tests for trace correctness.
-- [ ] Build offline clustering/residual table tool.
+- [x] Build offline clustering/contribution-prototype table tool.
 - [ ] Define sidecar header v1 and loader validation.
 - [ ] Integrate runtime lookup substitution in MoE path.
 - [ ] Implement fallback handling and warning logs.
