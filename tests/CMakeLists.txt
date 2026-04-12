@@ -250,6 +250,13 @@ if (Python3_Interpreter_FOUND)
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         ARGS -E env PYTHONPATH=${PROJECT_SOURCE_DIR} ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tests/test-build-moe-lookup.py
     )
+    llama_test_cmd(
+        ${CMAKE_COMMAND}
+        NAME test-convert-moe-lookup-to-elt1
+        LABEL python
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+        ARGS -E env PYTHONPATH=${PROJECT_SOURCE_DIR} ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tests/test-convert-moe-lookup-to-elt1.py
+    )
 endif()
 
 if (NOT LLAMA_SANITIZE_ADDRESS AND NOT GGML_SCHED_NO_REALLOC)

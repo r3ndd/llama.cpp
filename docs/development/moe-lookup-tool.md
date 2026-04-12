@@ -2,7 +2,9 @@
 
 This document describes the offline tool for building per-layer shared lookup/contribution tables from MoE trace NPZ v1 artifacts.
 
-- Script: `scripts/build-moe-lookup.py`
+- Scripts:
+  - `scripts/build-moe-lookup.py` (trace -> lookup NPZ + replaced JSON)
+  - `scripts/convert-moe-lookup-to-elt1.py` (lookup NPZ + replaced JSON -> runtime ELT1 binary)
 - Scope: Qwen3.5-MoE Algorithm 2 PoC (shared table per layer)
 - Runtime integration: sidecar generation only (no inference-path wiring required in this stage)
 
@@ -34,6 +36,16 @@ python3 scripts/build-moe-lookup.py \
   --clusters-per-layer 1024 \
   --replace-ratio 0.10 \
   --scaling-mode s_missing
+```
+
+Example (convert builder output to ELT1 runtime sidecar):
+
+```bash
+python3 scripts/convert-moe-lookup-to-elt1.py \
+  --input out/qwen35moe.lookup.npz \
+  --replaced-experts out/qwen35moe.replaced-experts.json \
+  --output out/qwen35moe.lookup.elt1 \
+  --model-id qwen3moe
 ```
 
 Example (plot-only heuristic mode):
@@ -122,6 +134,58 @@ Per selected layer `L`:
   }
 }
 ```
+
+### 3) Runtime ELT1 binary sidecar (from converter)
+
+`convert-moe-lookup-to-elt1.py` emits the runtime binary sidecar schema loaded by `src/moe-lookup.cpp`:
+
+- Header (`llama_moe_lookup_header_v1`):
+  - `magic = "ELT1"`
+  - `format_version = 1`
+  - `model_id`
+  - `n_layer`, `n_embd`, `n_expert`, `n_expert_used`
+  - `vector_dtype = fp16`
+  - `scaling_mode = s_missing`
+  - `n_layers_payload`
+- Per-layer payload (`llama_moe_lookup_layer_header_v1` + raw arrays):
+  - `layer_id`, `n_keys`, `replaced_count`
+  - `centroids` (`fp16[n_keys, n_embd]`)
+  - `contributions` (`fp16[n_keys, n_embd]`)
+  - `replaced_ids` (`u32[replaced_count]`)
+
+The converter performs strict validation to match runtime loader expectations (shape/type/scaling/layer/expert constraints).
+
+## Canonical end-to-end flow
+
+1. Generate trace NPZ with `--moe-trace-enable`.
+2. Build lookup NPZ + replaced JSON:
+
+   ```bash
+   python3 scripts/build-moe-lookup.py ...
+   ```
+
+3. Convert to runtime ELT1 binary:
+
+   ```bash
+   python3 scripts/convert-moe-lookup-to-elt1.py \
+     --input out/qwen35moe.lookup.npz \
+     --replaced-experts out/qwen35moe.replaced-experts.json \
+     --output out/qwen35moe.lookup.elt1 \
+     --model-id qwen3moe
+   ```
+
+4. Run inference with lookup enabled:
+
+   ```bash
+   ./bin/llama-cli \
+     -m /path/to/qwen35moe.gguf \
+     --moe-lookup-enable \
+     --moe-lookup-file out/qwen35moe.lookup.elt1 \
+     --moe-lookup-replaced-experts out/qwen35moe.replaced-experts.json \
+     -p "Hello"
+   ```
+
+Note: `--moe-lookup-replaced-experts` remains required by current runtime config validation even though ELT1 payload includes per-layer replaced IDs.
 
 ## Validation/error handling
 
