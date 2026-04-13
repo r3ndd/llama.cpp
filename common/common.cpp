@@ -1477,6 +1477,7 @@ struct llama_context_params common_context_params_to_llama(const common_params &
     cparams.swa_full          = params.swa_full;
     cparams.kv_unified        = params.kv_unified;
     cparams.moe_lookup_enable = params.moe_lookup_enable;
+    cparams.moe_lookup_remove_only = params.moe_lookup_remove_only;
     cparams.moe_trace_enable  = params.moe_trace_enable;
     cparams.moe_lookup_file   = params.moe_lookup_file.c_str();
     cparams.moe_lookup_replaced_experts = params.moe_lookup_replaced_experts.c_str();

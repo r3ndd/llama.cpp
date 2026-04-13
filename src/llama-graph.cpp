@@ -1422,12 +1422,17 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
     ggml_tensor * replaced_mask_3d = nullptr;
     if (use_lookup_layer) {
         std::vector<float> replace_bias((size_t) n_expert, 0.0f);
-        std::vector<float> replace_mask((size_t) n_expert, 0.0f);
+        std::vector<float> replace_mask;
+        if (!cparams.moe_lookup_remove_only) {
+            replace_mask.resize((size_t) n_expert, 0.0f);
+        }
         bool has_replaced = false;
         for (int64_t ie = 0; ie < n_expert; ++ie) {
             if (lookup_layer->replaced_mask[(size_t) ie] != 0) {
                 replace_bias[(size_t) ie] = -1e9f;
-                replace_mask[(size_t) ie] = 1.0f;
+                if (!cparams.moe_lookup_remove_only) {
+                    replace_mask[(size_t) ie] = 1.0f;
+                }
                 has_replaced = true;
             }
         }
@@ -1441,13 +1446,15 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
             ggml_set_input(replace_bias_t);
             ggml_set_name(replace_bias_t, "ffn_moe_lookup_replaced_bias");
 
-            replaced_mask_3d = ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, 1, n_expert, 1);
-            GGML_ASSERT(replaced_mask_3d != nullptr);
-            std::vector<uint8_t> replace_mask_bytes(replace_mask.size() * sizeof(float));
-            std::memcpy(replace_mask_bytes.data(), replace_mask.data(), replace_mask_bytes.size());
-            res->add_input(std::make_unique<llm_graph_input_static_tensor>(replaced_mask_3d, std::move(replace_mask_bytes)));
-            ggml_set_input(replaced_mask_3d);
-            ggml_set_name(replaced_mask_3d, "ffn_moe_lookup_replaced_mask");
+            if (!cparams.moe_lookup_remove_only) {
+                replaced_mask_3d = ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, 1, n_expert, 1);
+                GGML_ASSERT(replaced_mask_3d != nullptr);
+                std::vector<uint8_t> replace_mask_bytes(replace_mask.size() * sizeof(float));
+                std::memcpy(replace_mask_bytes.data(), replace_mask.data(), replace_mask_bytes.size());
+                res->add_input(std::make_unique<llm_graph_input_static_tensor>(replaced_mask_3d, std::move(replace_mask_bytes)));
+                ggml_set_input(replaced_mask_3d);
+                ggml_set_name(replaced_mask_3d, "ffn_moe_lookup_replaced_mask");
+            }
 
             ggml_tensor * selection_probs_routed = ggml_add(ctx0, selection_probs, replace_bias_t);
             cb(selection_probs_routed, "ffn_moe_probs_lookup_masked", il);
@@ -1738,9 +1745,11 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
 
     cb(moe_out, "ffn_moe_out", il);
 
-    if (use_lookup_layer && replaced_mask_3d) {
+    if (use_lookup_layer && replaced_mask_3d && !cparams.moe_lookup_remove_only) {
+        ggml_tensor * replaced_mask = ggml_repeat_4d(ctx0, replaced_mask_3d, 1, n_expert, n_tokens, 1);
+
         // mandatory s_missing scaling uses baseline selected top-k router weights
-        ggml_tensor * missing_flags = ggml_get_rows(ctx0, replaced_mask_3d, selected_experts); // [1, n_expert_used, n_tokens]
+        ggml_tensor * missing_flags = ggml_get_rows(ctx0, replaced_mask, selected_experts); // [1, n_expert_used, n_tokens]
         cb(missing_flags, "ffn_moe_lookup_missing_flags", il);
 
         ggml_tensor * missing_weights = ggml_mul(ctx0, weights_base, missing_flags); // [1, n_expert_used, n_tokens]
@@ -1781,6 +1790,7 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
         cb(nearest, "ffn_moe_lookup_key", il);
 
         ggml_tensor * contrib_3d = ggml_reshape_3d(ctx0, contributions, n_embd, n_keys, 1);
+        contrib_3d = ggml_repeat_4d(ctx0, contrib_3d, n_embd, n_keys, n_tokens, 1);
         ggml_tensor * lookup = ggml_get_rows(ctx0, contrib_3d, nearest); // [n_embd, 1, n_tokens]
         lookup = ggml_reshape_2d(ctx0, lookup, n_embd, n_tokens);
         cb(lookup, "ffn_moe_lookup_u", il);

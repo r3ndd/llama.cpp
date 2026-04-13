@@ -628,6 +628,7 @@ struct llm_graph_params {
         return
             cparams.embeddings  == other.cparams.embeddings  &&
             cparams.causal_attn == other.cparams.causal_attn &&
+            cparams.moe_lookup_remove_only == other.cparams.moe_lookup_remove_only &&
             arch  == other.arch  &&
             gtype == other.gtype &&
             cvec  == other.cvec  &&

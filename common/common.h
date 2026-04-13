@@ -546,6 +546,7 @@ struct common_params {
 
     // Experimental MoE lookup / trace options (default-off)
     bool moe_lookup_enable = false;
+    bool moe_lookup_remove_only = false;
     bool moe_trace_enable  = false;
 
     std::string moe_lookup_file;

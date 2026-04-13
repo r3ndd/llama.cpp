@@ -505,9 +505,9 @@ After this gate, extract reusable MoE lookup interfaces around `build_moe_ffn(..
 - [x] Implement trace hooks + NPZ writer v1.
 - [x] Implement parity assertions/tests for trace correctness.
 - [x] Build offline clustering/contribution-prototype table tool.
-- [ ] Define sidecar header v1 and loader validation.
-- [ ] Integrate runtime lookup substitution in MoE path.
-- [ ] Implement fallback handling and warning logs.
+- [x] Define sidecar header v1 and loader validation.
+- [x] Integrate runtime lookup substitution in MoE path.
+- [x] Implement fallback handling and warning logs.
 - [ ] Run quality/perf evaluation matrix.
 - [ ] Publish result summary vs acceptance gates.
 

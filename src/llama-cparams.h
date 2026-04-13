@@ -42,6 +42,7 @@ struct llama_cparams {
     bool pipeline_parallel;
 
     bool moe_lookup_enable;
+    bool moe_lookup_remove_only;
     bool moe_trace_enable;
 
     std::string moe_lookup_file;

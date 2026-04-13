@@ -355,6 +355,7 @@ extern "C" {
 
         // [EXPERIMENTAL] MoE lookup / trace options
         bool        moe_lookup_enable; // enable runtime MoE lookup path (default: off)
+        bool        moe_lookup_remove_only; // mask removed experts but skip lookup contribution add (default: off)
         bool        moe_trace_enable;  // enable MoE trace capture (default: off)
         const char * moe_lookup_file;             // sidecar lookup artifact path
         const char * moe_lookup_replaced_experts; // replaced-experts config path

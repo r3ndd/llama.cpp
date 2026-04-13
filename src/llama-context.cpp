@@ -202,6 +202,7 @@ llama_context::llama_context(
     cparams.op_offload = params.op_offload;
     cparams.kv_unified = params.kv_unified;
     cparams.moe_lookup_enable = params.moe_lookup_enable;
+    cparams.moe_lookup_remove_only = params.moe_lookup_remove_only;
     cparams.moe_trace_enable  = params.moe_trace_enable;
     cparams.moe_lookup_file = params.moe_lookup_file ? params.moe_lookup_file : "";
     cparams.moe_lookup_replaced_experts = params.moe_lookup_replaced_experts ? params.moe_lookup_replaced_experts : "";
@@ -242,6 +243,9 @@ llama_context::llama_context(
                 LLAMA_LOG_WARN("%s: MoE lookup loaded with warnings: %s\n", __func__, lookup_warning.c_str());
             }
             LLAMA_LOG_WARN("%s: experimental MoE lookup enabled (format_version=%u)\n", __func__, this->moe_lookup_table->format_version());
+            if (cparams.moe_lookup_remove_only) {
+                LLAMA_LOG_WARN("%s: MoE lookup remove-only mode active (lookup contribution disabled)\n", __func__);
+            }
         }
     }
 
@@ -3003,6 +3007,7 @@ llama_context_params llama_context_default_params() {
         /*.cb_eval                     =*/ nullptr,
         /*.cb_eval_user_data           =*/ nullptr,
         /*.moe_lookup_enable           =*/ false,
+        /*.moe_lookup_remove_only      =*/ false,
         /*.moe_trace_enable            =*/ false,
         /*.moe_lookup_file             =*/ nullptr,
         /*.moe_lookup_replaced_experts =*/ nullptr,

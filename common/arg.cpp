@@ -2336,6 +2336,13 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
         }
     ).set_env("LLAMA_ARG_MOE_LOOKUP_ENABLE"));
     add_opt(common_arg(
+        {"--moe-lookup-remove-only"},
+        "enable experimental MoE remove-only mode (mask removed experts, skip lookup contribution add)",
+        [](common_params & params) {
+            params.moe_lookup_remove_only = true;
+        }
+    ).set_env("LLAMA_ARG_MOE_LOOKUP_REMOVE_ONLY"));
+    add_opt(common_arg(
         {"--moe-lookup-file"}, "FNAME",
         "path to experimental MoE lookup sidecar artifact",
         [](common_params & params, const std::string & value) {
