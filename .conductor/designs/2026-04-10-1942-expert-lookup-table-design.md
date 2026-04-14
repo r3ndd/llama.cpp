@@ -508,7 +508,7 @@ After this gate, extract reusable MoE lookup interfaces around `build_moe_ffn(..
 - [x] Define sidecar header v1 and loader validation.
 - [x] Integrate runtime lookup substitution in MoE path.
 - [x] Implement fallback handling and warning logs.
-- [ ] Run quality/perf evaluation matrix.
+- [x] Run quality/perf evaluation matrix.
 - [ ] Publish result summary vs acceptance gates.
 
 ---
