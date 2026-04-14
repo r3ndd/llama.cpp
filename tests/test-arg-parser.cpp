@@ -127,6 +127,10 @@ int main(void) {
     assert(true == common_params_parse(argv.size(), list_str_to_char(argv).data(), params, LLAMA_EXAMPLE_COMMON));
     assert(params.moe_lookup_remove_only == true);
 
+    argv = {"binary_name", "--moe-lookup-remove-only"};
+    assert(true == common_params_parse(argv.size(), list_str_to_char(argv).data(), params, LLAMA_EXAMPLE_PERPLEXITY));
+    assert(params.moe_lookup_remove_only == true);
+
     // --draft cannot be used outside llama-speculative
     argv = {"binary_name", "--draft", "123"};
     assert(true == common_params_parse(argv.size(), list_str_to_char(argv).data(), params, LLAMA_EXAMPLE_SPECULATIVE));

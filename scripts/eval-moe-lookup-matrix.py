@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
-"""Plan and summarize MoE lookup quality/perf evaluation matrices.
+"""Plan, run, and summarize MoE lookup quality/perf evaluation matrices.
 
-This script is intentionally offline-only:
-- It does not run inference, perplexity, or benchmarks.
-- It consumes existing artifacts/results and emits matrix + gate summaries.
+Modes:
+- discover/summarize: consume existing artifacts/results.
+- run-ppl: execute llama-perplexity for baseline, lookup, and remove-only rows.
 """
 
 from __future__ import annotations
@@ -13,22 +13,26 @@ import argparse
 import csv
 import json
 import re
+import subprocess
 import statistics
 import sys
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 
 
 PPL_PATTERNS = [
+    re.compile(r"Final\s+estimate\s*:\s*PPL\s*=\s*([0-9]+(?:\.[0-9]+)?)", re.IGNORECASE),
     re.compile(r"Mean\s+PPL(?:\([^\)]*\))?\s*[:=]\s*([0-9]+(?:\.[0-9]+)?)", re.IGNORECASE),
-    re.compile(r"\bperplexity\b\s*[:=]\s*([0-9]+(?:\.[0-9]+)?)", re.IGNORECASE),
     re.compile(r"\bppl\b\s*[:=]\s*([0-9]+(?:\.[0-9]+)?)", re.IGNORECASE),
+    re.compile(r"\bperplexity\b\s*[:=]\s*([0-9]+(?:\.[0-9]+)?)", re.IGNORECASE),
 ]
 
+TOK_S_PATTERN = re.compile(r"([0-9]+(?:\.[0-9]+)?)\s+tokens\s+per\s+second", re.IGNORECASE)
 
-def parse_args() -> argparse.Namespace:
+
+def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Plan/summarize MoE lookup evaluation matrix from existing artifacts.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -74,7 +78,70 @@ def parse_args() -> argparse.Namespace:
         help="Fail if any non-baseline row is missing ppl/tok_s (or result paths that can be parsed).",
     )
 
-    return parser.parse_args()
+    run_ppl = sub.add_parser(
+        "run-ppl",
+        help="Run llama-perplexity for baseline + lookup/remove-only conditions and emit matrix + summaries.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        add_help=False,
+    )
+    run_ppl.add_argument("--help", action="help", help="show this help message and exit")
+    run_ppl.add_argument("--perplexity-bin", type=Path, required=True, help="Path to llama-perplexity binary.")
+    run_ppl.add_argument(
+        "--moe-lookup-file",
+        action="append",
+        default=[],
+        help="ELT1 lookup file for a condition (repeatable, pairs by index with --moe-lookup-replaced-experts).",
+    )
+    run_ppl.add_argument(
+        "--moe-lookup-replaced-experts",
+        action="append",
+        default=[],
+        help="Replaced-experts JSON for a condition (repeatable, pairs by index with --moe-lookup-file).",
+    )
+    run_ppl.add_argument(
+        "--condition-id",
+        action="append",
+        default=[],
+        help="Optional condition id for each lookup pair (repeatable).",
+    )
+    run_ppl.add_argument("--baseline-id", type=str, default="baseline", help="ID for baseline row.")
+    run_ppl.add_argument("--quality-max-ppl-delta", type=float, default=2.0, help="Quality gate threshold for ppl_delta.")
+    run_ppl.add_argument("--logs-dir", type=Path, required=True, help="Directory where per-run perplexity logs are written.")
+    run_ppl.add_argument("--output-matrix", type=Path, required=True, help="Output matrix JSON path.")
+    run_ppl.add_argument("--output-md", type=Path, required=True, help="Output summary Markdown path.")
+    run_ppl.add_argument("--output-json", type=Path, required=True, help="Output summary JSON path.")
+
+    args, unknown = parser.parse_known_args(argv)
+
+    if args.cmd == "run-ppl":
+        passthrough: List[str] = []
+        i = 0
+        while i < len(unknown):
+            token = unknown[i]
+            if token == "--":
+                i += 1
+                continue
+            # Backward-compatible shim for old style:
+            #   --perplexity-arg --ctx-size --perplexity-arg 256
+            if token == "--perplexity-arg":
+                if i + 1 >= len(unknown):
+                    parser.error("--perplexity-arg requires a value")
+                passthrough.append(unknown[i + 1])
+                i += 2
+                continue
+            passthrough.append(token)
+            i += 1
+
+        if not passthrough:
+            parser.error("run-ppl requires llama-perplexity arguments (e.g. -hf/-hff/-f or -m/-f)")
+
+        args.perplexity_passthrough = passthrough
+        return args
+
+    if unknown:
+        parser.error(f"unrecognized arguments: {' '.join(unknown)}")
+
+    return args
 
 
 def _read_json(path: Path) -> Dict[str, Any]:
@@ -320,6 +387,23 @@ def parse_ppl_result(path: Path) -> float:
     raise ValueError(f"could not parse perplexity value from '{path}'")
 
 
+def parse_perplexity_tok_s_result(path: Path) -> float:
+    text = path.read_text(encoding="utf-8")
+    values: List[float] = []
+    for line in text.splitlines():
+        if "llama_perf_context_print:" not in line:
+            continue
+        if "tokens per second" not in line.lower():
+            continue
+        for match in TOK_S_PATTERN.finditer(line):
+            v = float(match.group(1))
+            if np.isfinite(v):
+                values.append(v)
+    if not values:
+        raise ValueError(f"could not parse tokens/sec from '{path}'")
+    return float(statistics.mean(values))
+
+
 def _iter_llama_bench_rows(path: Path) -> Iterable[Dict[str, Any]]:
     suffix = path.suffix.lower()
     if suffix == ".jsonl":
@@ -381,6 +465,8 @@ def _materialize_row_metrics(row: Dict[str, Any]) -> Dict[str, Any]:
         out["ppl"] = parse_ppl_result(Path(str(out["ppl_result_path"])))
     if out.get("tok_s") is None and out.get("bench_result_path"):
         out["tok_s"] = parse_bench_tok_s(Path(str(out["bench_result_path"])))
+    if out.get("tok_s") is None and out.get("ppl_result_path"):
+        out["tok_s"] = parse_perplexity_tok_s_result(Path(str(out["ppl_result_path"])))
 
     return out
 
@@ -557,6 +643,158 @@ def _write_text(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
+def _sanitize_id_for_filename(value: str) -> str:
+    out = []
+    for ch in value:
+        out.append(ch if (ch.isalnum() or ch in {"-", "_", "."}) else "_")
+    return "".join(out)
+
+
+def _build_lookup_conditions(
+    lookup_files: Sequence[str],
+    replaced_files: Sequence[str],
+    condition_ids: Sequence[str],
+) -> List[Dict[str, str]]:
+    if len(lookup_files) != len(replaced_files):
+        raise ValueError("--moe-lookup-file and --moe-lookup-replaced-experts must appear the same number of times")
+    if not lookup_files:
+        raise ValueError("at least one lookup condition pair is required")
+    if condition_ids and len(condition_ids) != len(lookup_files):
+        raise ValueError("--condition-id count must match number of lookup pairs")
+
+    conditions: List[Dict[str, str]] = []
+    for i, (lookup, replaced) in enumerate(zip(lookup_files, replaced_files), start=1):
+        cid = condition_ids[i - 1] if condition_ids else Path(lookup).stem
+        if not cid:
+            cid = f"cond{i}"
+        conditions.append(
+            {
+                "id": cid,
+                "lookup_file": lookup,
+                "replaced_experts_json": replaced,
+            }
+        )
+    return conditions
+
+
+def _run_perplexity_command(cmd: List[str], log_path: Path) -> float:
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    text = (proc.stdout or "") + ("\n" if proc.stdout and proc.stderr else "") + (proc.stderr or "")
+    _write_text(log_path, text)
+    if proc.returncode != 0:
+        raise ValueError(f"command failed ({proc.returncode}): {' '.join(cmd)} (see {log_path})")
+    return parse_ppl_result(log_path)
+
+
+def run_ppl_matrix(
+    *,
+    perplexity_bin: Path,
+    perplexity_args: Sequence[str],
+    baseline_id: str,
+    quality_max_ppl_delta: float,
+    logs_dir: Path,
+    conditions: Sequence[Dict[str, str]],
+) -> Tuple[Dict[str, Any], Dict[str, Any], str]:
+    if not perplexity_bin.exists():
+        raise ValueError(f"perplexity binary does not exist: {perplexity_bin}")
+
+    logs_dir.mkdir(parents=True, exist_ok=True)
+
+    base_cmd = [str(perplexity_bin)] + list(perplexity_args)
+
+    rows: List[Dict[str, Any]] = []
+
+    baseline_log = logs_dir / f"{_sanitize_id_for_filename(baseline_id)}.log"
+    baseline_ppl = _run_perplexity_command(base_cmd, baseline_log)
+    baseline_tok_s = parse_perplexity_tok_s_result(baseline_log)
+    rows.append(
+        {
+            "id": baseline_id,
+            "mode": "baseline",
+            "lookup_file": None,
+            "replaced_experts_json": None,
+            "replace_ratio": 0.0,
+            "clusters_per_layer": None,
+            "scaling_mode": None,
+            "ppl": baseline_ppl,
+            "tok_s": baseline_tok_s,
+            "ppl_result_path": str(baseline_log),
+            "bench_result_path": None,
+            "stable": True,
+            "notes": "auto-generated by run-ppl",
+        }
+    )
+
+    for cond in conditions:
+        cond_id = cond["id"]
+        lookup_file = cond["lookup_file"]
+        replaced = cond["replaced_experts_json"]
+
+        lookup_cmd = base_cmd + [
+            "--moe-lookup-enable",
+            "--moe-lookup-file", lookup_file,
+            "--moe-lookup-replaced-experts", replaced,
+        ]
+        lookup_log = logs_dir / f"{_sanitize_id_for_filename('lookup-' + cond_id)}.log"
+        lookup_ppl = _run_perplexity_command(lookup_cmd, lookup_log)
+        lookup_tok_s = parse_perplexity_tok_s_result(lookup_log)
+        rows.append(
+            {
+                "id": f"lookup:{cond_id}",
+                "mode": "lookup",
+                "lookup_file": lookup_file,
+                "replaced_experts_json": replaced,
+                "replace_ratio": None,
+                "clusters_per_layer": None,
+                "scaling_mode": "s_missing",
+                "ppl": lookup_ppl,
+                "tok_s": lookup_tok_s,
+                "ppl_result_path": str(lookup_log),
+                "bench_result_path": None,
+                "stable": True,
+                "notes": "auto-generated by run-ppl",
+            }
+        )
+
+        remove_cmd = lookup_cmd + ["--moe-lookup-remove-only"]
+        remove_log = logs_dir / f"{_sanitize_id_for_filename('remove-only-' + cond_id)}.log"
+        remove_ppl = _run_perplexity_command(remove_cmd, remove_log)
+        remove_tok_s = parse_perplexity_tok_s_result(remove_log)
+        rows.append(
+            {
+                "id": f"remove-only:{cond_id}",
+                "mode": "remove-only",
+                "lookup_file": lookup_file,
+                "replaced_experts_json": replaced,
+                "replace_ratio": None,
+                "clusters_per_layer": None,
+                "scaling_mode": None,
+                "ppl": remove_ppl,
+                "tok_s": remove_tok_s,
+                "ppl_result_path": str(remove_log),
+                "bench_result_path": None,
+                "stable": True,
+                "notes": "auto-generated by run-ppl",
+            }
+        )
+
+    matrix = {
+        "format_version": 1,
+        "acceptance_gates": {
+            "quality_max_ppl_delta": float(quality_max_ppl_delta),
+            "notes": [
+                "Primary gate: at least one lookup configuration with ppl_delta <= threshold vs baseline.",
+                "Rows generated by run-ppl.",
+            ],
+        },
+        "rows": rows,
+    }
+
+    summary = summarize_matrix(matrix, require_complete=False)
+    md = render_summary_markdown(summary)
+    return matrix, summary, md
+
+
 def main() -> int:
     args = parse_args()
 
@@ -576,6 +814,28 @@ def main() -> int:
         print(f"wrote summary markdown: {args.output_md}")
         if args.output_json is not None:
             print(f"wrote summary json: {args.output_json}")
+        return 0
+
+    if args.cmd == "run-ppl":
+        conditions = _build_lookup_conditions(
+            lookup_files=args.moe_lookup_file,
+            replaced_files=args.moe_lookup_replaced_experts,
+            condition_ids=args.condition_id,
+        )
+        matrix, summary, md = run_ppl_matrix(
+            perplexity_bin=args.perplexity_bin,
+            perplexity_args=args.perplexity_passthrough,
+            baseline_id=args.baseline_id,
+            quality_max_ppl_delta=args.quality_max_ppl_delta,
+            logs_dir=args.logs_dir,
+            conditions=conditions,
+        )
+        _write_json(args.output_matrix, matrix)
+        _write_json(args.output_json, summary)
+        _write_text(args.output_md, md)
+        print(f"wrote matrix manifest: {args.output_matrix}")
+        print(f"wrote summary json: {args.output_json}")
+        print(f"wrote summary markdown: {args.output_md}")
         return 0
 
     raise ValueError(f"unknown command: {args.cmd}")

@@ -248,6 +248,47 @@ Summary output includes:
 
 This flow is artifact-driven and does not require generating new traces.
 
+### Optional: run perplexity automatically for baseline + lookup + remove-only
+
+`eval-moe-lookup-matrix.py run-ppl` can execute `llama-perplexity` directly and emit:
+
+- matrix JSON,
+- summary JSON,
+- summary markdown.
+
+Each lookup condition is a pair of repeatable arguments:
+
+- `--moe-lookup-file <elt1>`
+- `--moe-lookup-replaced-experts <json>`
+
+For each pair, the tool runs both lookup and remove-only modes, plus one baseline run.
+
+```bash
+python3 scripts/eval-moe-lookup-matrix.py run-ppl \
+  --perplexity-bin ./build/bin/llama-perplexity \
+  --moe-lookup-file /tmp/r10-k1024.elt1 \
+  --moe-lookup-replaced-experts /tmp/r10-k1024.replaced-experts.json \
+  --condition-id r10k1024 \
+  --moe-lookup-file /tmp/r20-k4096.elt1 \
+  --moe-lookup-replaced-experts /tmp/r20-k4096.replaced-experts.json \
+  --condition-id r20k4096 \
+  --logs-dir /tmp/moe-eval-logs \
+  --output-matrix /tmp/moe-eval-matrix.json \
+  --output-json /tmp/moe-eval-summary.json \
+  --output-md /tmp/moe-eval-summary.md \
+  -hf unsloth/Qwen3.5-35B-A3B-GGUF \
+  -hff Qwen3.5-35B-A3B-Q4_K_M.gguf \
+  -f /data/wikitext.valid.txt \
+  --ctx-size 4096 --chunks 1 -ngl 0
+```
+
+Notes:
+
+- `--moe-lookup-file` and `--moe-lookup-replaced-experts` counts must match exactly.
+- `--condition-id` is optional; if omitted, lookup file stem is used.
+- Perplexity arguments are passed natively and directly (no `--` separator required).
+- You can use either local model flags (`-m`) or HF flags (`-hf`/`-hff`) exactly as with `llama-perplexity`.
+
 ## Validation/error handling
 
 The tool validates:

@@ -25,6 +25,172 @@ def load_module():
 
 
 class TestEvalMoeLookupMatrix(unittest.TestCase):
+    def test_parse_args_run_ppl_passthrough_after_double_dash(self):
+        mod = load_module()
+        args = mod.parse_args(
+            [
+                "run-ppl",
+                "--perplexity-bin", "/bin/ppl",
+                "--moe-lookup-file", "/tmp/a.elt1",
+                "--moe-lookup-replaced-experts", "/tmp/a.json",
+                "--logs-dir", "/tmp/logs",
+                "--output-matrix", "/tmp/matrix.json",
+                "--output-json", "/tmp/summary.json",
+                "--output-md", "/tmp/summary.md",
+                "--",
+                "-m", "/tmp/model.gguf", "-f", "/tmp/eval.txt", "--ctx-size", "256", "--chunks", "1",
+            ]
+        )
+        self.assertEqual(args.perplexity_passthrough, ["-m", "/tmp/model.gguf", "-f", "/tmp/eval.txt", "--ctx-size", "256", "--chunks", "1"])
+
+    def test_parse_args_run_ppl_passthrough_without_double_dash(self):
+        mod = load_module()
+        args = mod.parse_args(
+            [
+                "run-ppl",
+                "--perplexity-bin", "/bin/ppl",
+                "--moe-lookup-file", "/tmp/a.elt1",
+                "--moe-lookup-replaced-experts", "/tmp/a.json",
+                "--logs-dir", "/tmp/logs",
+                "--output-matrix", "/tmp/matrix.json",
+                "--output-json", "/tmp/summary.json",
+                "--output-md", "/tmp/summary.md",
+                "-hf", "unsloth/Qwen3.5-35B-A3B-GGUF",
+                "-hff", "Qwen3.5-35B-A3B-Q4_K_M.gguf",
+                "-f", "/tmp/eval.txt",
+                "--ctx-size", "256",
+                "--chunks", "1",
+                "-ngl", "0",
+            ]
+        )
+        self.assertEqual(
+            args.perplexity_passthrough,
+            [
+                "-hf", "unsloth/Qwen3.5-35B-A3B-GGUF",
+                "-hff", "Qwen3.5-35B-A3B-Q4_K_M.gguf",
+                "-f", "/tmp/eval.txt",
+                "--ctx-size", "256",
+                "--chunks", "1",
+                "-ngl", "0",
+            ],
+        )
+
+    def test_parse_args_run_ppl_supports_legacy_perplexity_arg_shim(self):
+        mod = load_module()
+        args = mod.parse_args(
+            [
+                "run-ppl",
+                "--perplexity-bin", "/bin/ppl",
+                "--moe-lookup-file", "/tmp/a.elt1",
+                "--moe-lookup-replaced-experts", "/tmp/a.json",
+                "--logs-dir", "/tmp/logs",
+                "--output-matrix", "/tmp/matrix.json",
+                "--output-json", "/tmp/summary.json",
+                "--output-md", "/tmp/summary.md",
+                "--perplexity-arg", "--ctx-size",
+                "--perplexity-arg", "256",
+            ]
+        )
+        self.assertEqual(args.perplexity_passthrough, ["--ctx-size", "256"])
+
+    def test_parse_args_non_run_ppl_rejects_unknown_args(self):
+        mod = load_module()
+        with self.assertRaises(SystemExit):
+            mod.parse_args(["discover", "--lookup-npz", "/tmp/a.npz", "--output", "/tmp/o.json", "--bogus"])
+
+    def test_parse_args_run_ppl_requires_some_passthrough_args(self):
+        mod = load_module()
+        with self.assertRaises(SystemExit):
+            mod.parse_args(
+                [
+                    "run-ppl",
+                    "--perplexity-bin", "/bin/ppl",
+                    "--moe-lookup-file", "/tmp/a.elt1",
+                    "--moe-lookup-replaced-experts", "/tmp/a.json",
+                    "--logs-dir", "/tmp/logs",
+                    "--output-matrix", "/tmp/matrix.json",
+                    "--output-json", "/tmp/summary.json",
+                    "--output-md", "/tmp/summary.md",
+                ]
+            )
+
+    def test_build_lookup_conditions_pairs_repeatable_args(self):
+        mod = load_module()
+
+        conditions = mod._build_lookup_conditions(
+            lookup_files=["/tmp/a.elt1", "/tmp/b.elt1"],
+            replaced_files=["/tmp/a.json", "/tmp/b.json"],
+            condition_ids=["cond-a", "cond-b"],
+        )
+
+        self.assertEqual(len(conditions), 2)
+        self.assertEqual(conditions[0]["id"], "cond-a")
+        self.assertEqual(conditions[1]["lookup_file"], "/tmp/b.elt1")
+
+    def test_build_lookup_conditions_rejects_mismatched_pairs(self):
+        mod = load_module()
+
+        with self.assertRaises(ValueError):
+            mod._build_lookup_conditions(
+                lookup_files=["/tmp/a.elt1"],
+                replaced_files=[],
+                condition_ids=[],
+            )
+
+    def test_run_ppl_matrix_generates_baseline_lookup_remove_only_rows(self):
+        mod = load_module()
+
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            ppl_bin = tmp / "llama-perplexity"
+            ppl_bin.write_text("#!/bin/sh\n", encoding="utf-8")
+
+            calls = []
+
+            def fake_run(cmd, log_path):
+                calls.append((list(cmd), str(log_path)))
+                Path(log_path).parent.mkdir(parents=True, exist_ok=True)
+                Path(log_path).write_text(
+                    "\n".join(
+                        [
+                            "perplexity: 3.30 seconds per pass - ETA Final estimate: PPL = 4.8594 +/- 1.04473",
+                            "llama_perf_context_print: prompt eval time = 0.18 ms / 256 tokens (0.00 ms per token, 1398907.10 tokens per second)",
+                        ]
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                return 10.0 + len(calls)
+
+            old = mod._run_perplexity_command
+            mod._run_perplexity_command = fake_run
+            try:
+                matrix, summary, md = mod.run_ppl_matrix(
+                    perplexity_bin=ppl_bin,
+                    perplexity_args=["-m", "/tmp/model.gguf", "-f", "/tmp/eval.txt", "--ctx-size", "256"],
+                    baseline_id="baseline",
+                    quality_max_ppl_delta=2.0,
+                    logs_dir=tmp / "logs",
+                    conditions=[
+                        {
+                            "id": "c1",
+                            "lookup_file": "/tmp/lookup.elt1",
+                            "replaced_experts_json": "/tmp/replaced.json",
+                        }
+                    ],
+                )
+            finally:
+                mod._run_perplexity_command = old
+
+            rows = matrix["rows"]
+            self.assertEqual([r["mode"] for r in rows], ["baseline", "lookup", "remove-only"])
+            self.assertEqual(rows[1]["id"], "lookup:c1")
+            self.assertEqual(rows[2]["id"], "remove-only:c1")
+            self.assertEqual(len(calls), 3)
+            self.assertIn("--ctx-size", calls[0][0])
+            self.assertIn("MoE Lookup Evaluation Matrix Summary", md)
+            self.assertIn("rows", summary)
+
     def test_discover_matrix_adds_baseline_lookup_and_remove_only_rows(self):
         mod = load_module()
 
@@ -82,6 +248,63 @@ class TestEvalMoeLookupMatrix(unittest.TestCase):
             )
 
             self.assertAlmostEqual(mod.parse_bench_tok_s(bench), 25.0)
+
+    def test_parse_ppl_result_prefers_final_estimate_ppl_over_seconds_per_pass(self):
+        mod = load_module()
+
+        with tempfile.TemporaryDirectory() as td:
+            log = Path(td) / "ppl.log"
+            log.write_text(
+                "\n".join(
+                    [
+                        "perplexity: calculating perplexity over 1 chunks, n_ctx=256",
+                        "perplexity: 3.30 seconds per pass - ETA Final estimate: PPL = 4.8594 +/- 1.04473",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            self.assertAlmostEqual(mod.parse_ppl_result(log), 4.8594)
+
+    def test_parse_perplexity_tok_s_result_parses_perf_line_and_ignores_inf(self):
+        mod = load_module()
+
+        with tempfile.TemporaryDirectory() as td:
+            log = Path(td) / "ppl.log"
+            log.write_text(
+                "\n".join(
+                    [
+                        "llama_perf_context_print: prompt eval time =       0.18 ms /   256 tokens (    0.00 ms per token, 1398907.10 tokens per second)",
+                        "llama_perf_context_print:        eval time =       0.00 ms /     1 runs   (    0.00 ms per token,      inf tokens per second)",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            self.assertAlmostEqual(mod.parse_perplexity_tok_s_result(log), 1398907.10)
+
+    def test_materialize_row_metrics_fills_tok_s_from_ppl_log(self):
+        mod = load_module()
+
+        with tempfile.TemporaryDirectory() as td:
+            log = Path(td) / "ppl.log"
+            log.write_text(
+                "\n".join(
+                    [
+                        "perplexity: 3.30 seconds per pass - ETA Final estimate: PPL = 4.8594 +/- 1.04473",
+                        "llama_perf_context_print: prompt eval time = 0.18 ms / 256 tokens (0.00 ms per token, 1398907.10 tokens per second)",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            row = {"id": "r", "mode": "lookup", "ppl": None, "tok_s": None, "ppl_result_path": str(log)}
+            out = mod._materialize_row_metrics(row)
+            self.assertAlmostEqual(out["ppl"], 4.8594)
+            self.assertAlmostEqual(out["tok_s"], 1398907.10)
 
     def test_summarize_matrix_parses_result_paths_and_evaluates_gate(self):
         mod = load_module()
