@@ -12,3 +12,4 @@
 - For revised Algorithm-2 traces, capture per-selected-expert outputs immediately after `ffn_moe_down(_scaled)` and before `ffn_moe_weighted` to preserve alignment with `topk_ids`/`topk_weights`.
 - A MoE lookup layer is active only when `replaced_mask` contains at least one replaced expert; sidecar presence alone must not enable lookup.
 - `llama_moe_lookup_table::load()` currently requires a readable `--moe-lookup-replaced-experts` sidecar even when ELT1 `replaced_ids` exists; treat the JSON sidecar as a required runtime artifact.
+- Lookup routing uses two top-k sets: `selected_experts_routed` is recomputed at full `n_expert_used` after masking replaced experts (`-1e9` bias), while `s_missing` is computed from baseline `selected_experts`; replacement does not reduce compute-k.

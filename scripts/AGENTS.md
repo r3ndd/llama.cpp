@@ -8,3 +8,4 @@
 - Lookup NPZs may yield non-uniform per-layer centroid counts (e.g. `< requested k`) after k-means; matrix discovery will emit `clusters_per_layer` as a list of observed counts rather than a single scalar.
 - If baseline PPL is unavailable in existing artifacts, eval-matrix summarization still reports throughput deltas and marks quality gate as `N/A` instead of forcing a false fail.
 - For Qwen3.5-MoE sidecars, `convert-moe-lookup-to-elt1.py --model-id` must match runtime `model.arch_name()` exactly (`qwen35moe` for current GGUFs); using legacy `qwen3moe` hard-disables lookup at load with a model_id mismatch warning.
+- `build-moe-lookup.py` keeps rows with zero replaced mass in clustering/aggregation (targets stay zero and are averaged into centroid contributions); they are not filtered out before table construction.
