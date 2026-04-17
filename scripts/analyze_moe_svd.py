@@ -127,7 +127,7 @@ def _empty_summary(total_tensors: int, candidates: int, skipped_reasons: Counter
     )
     return SummaryStats(
         participation_ratio=empty,
-        cosine_similarity=empty,
+        explained_spectral_energy_rank_r=empty,
         counts={
             "total_tensors": total_tensors,
             "candidates": candidates,
@@ -256,7 +256,7 @@ def main(argv: list[str]) -> int:
     for idx, ref in enumerate(candidates, start=1):
         t0 = time.perf_counter()
         try:
-            matrix = load_matrix_from_reader(reader=reader, tensor_name=ref.tensor_name, dtype=args.dtype)
+            matrix = load_matrix_from_reader(reader=reader, matrix_ref=ref, dtype=args.dtype)
             if not np.isfinite(matrix).all():
                 raise ValueError("non_finite_values_after_dequantization")
 
@@ -266,15 +266,18 @@ def main(argv: list[str]) -> int:
             per_matrix.append(
                 PerMatrixRecord(
                     tensor=ref.tensor_name,
+                    source_tensor=ref.source_tensor_name,
                     layer=ref.layer,
                     expert=ref.expert,
                     role=ref.role,
                     tensor_type=ref.tensor_type,
+                    packed_expert_index=ref.packed_expert_index,
+                    packed_expert_axis=ref.packed_expert_axis,
                     shape=ref.shape,
                     rank_used=metrics.rank_used,
                     singular_value_count=metrics.singular_value_count,
                     participation_ratio=metrics.participation_ratio,
-                    cosine_similarity_lowrank=metrics.cosine_similarity_lowrank,
+                    explained_spectral_energy_rank_r=metrics.explained_spectral_energy_rank_r,
                     fro_norm=metrics.fro_norm,
                     elapsed_seconds=elapsed,
                     warnings=metrics.analysis_warnings,
@@ -284,9 +287,12 @@ def main(argv: list[str]) -> int:
             failed.append(
                 FailedMatrix(
                     tensor=ref.tensor_name,
+                    source_tensor=ref.source_tensor_name,
                     layer=ref.layer,
                     expert=ref.expert,
                     role=ref.role,
+                    packed_expert_index=ref.packed_expert_index,
+                    packed_expert_axis=ref.packed_expert_axis,
                     reason=f"{type(exc).__name__}: {exc}",
                 ),
             )

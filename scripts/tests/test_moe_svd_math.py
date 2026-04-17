@@ -26,6 +26,14 @@ def test_zero_matrix_guards() -> None:
     metrics = analyze_matrix(w, rank_frac=0.25)
 
     assert metrics.participation_ratio == 0.0
-    assert metrics.cosine_similarity_lowrank == 0.0
+    assert metrics.explained_spectral_energy_rank_r == 0.0
     assert "zero_singular_values_denominator" in metrics.analysis_warnings
-    assert "zero_norm_for_cosine" in metrics.analysis_warnings
+    assert "zero_total_spectral_energy" in metrics.analysis_warnings
+
+
+def test_explained_spectral_energy_uses_singular_values() -> None:
+    w = np.diag(np.array([5.0, 4.0, 3.0, 0.0], dtype=np.float64))
+    metrics = analyze_matrix(w, rank_frac=0.5)
+
+    expected = (5.0**2 + 4.0**2) / (5.0**2 + 4.0**2 + 3.0**2)
+    assert np.isclose(metrics.explained_spectral_energy_rank_r, expected)

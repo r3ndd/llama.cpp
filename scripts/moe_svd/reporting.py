@@ -35,7 +35,7 @@ def print_cli_summary(report: Report, quiet: bool) -> None:
         f"analyzed={counts['analyzed']} failed={len(report.failed_matrices)}",
     )
     print(_fmt_dist("Participation ratio", report.summary.participation_ratio))
-    print(_fmt_dist("Cosine similarity", report.summary.cosine_similarity))
+    print(_fmt_dist("Explained spectral energy (rank-r)", report.summary.explained_spectral_energy_rank_r))
 
     if counts["skipped_by_reason"]:
         print("Skipped by reason:")

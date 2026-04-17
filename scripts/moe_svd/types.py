@@ -17,11 +17,14 @@ class ResolvedModel:
 @dataclass(slots=True)
 class MatrixRef:
     tensor_name: str
+    source_tensor_name: str
     shape: tuple[int, int]
     layer: int | None
     expert: int | None
     role: str | None
     tensor_type: str
+    packed_expert_index: int | None = None
+    packed_expert_axis: int | None = None
 
 
 @dataclass(slots=True)
@@ -45,7 +48,7 @@ class MatrixMetrics:
     rank_used: int
     singular_value_count: int
     participation_ratio: float
-    cosine_similarity_lowrank: float
+    explained_spectral_energy_rank_r: float
     fro_norm: float
     analysis_warnings: list[str] = field(default_factory=list)
 
@@ -53,15 +56,18 @@ class MatrixMetrics:
 @dataclass(slots=True)
 class PerMatrixRecord:
     tensor: str
+    source_tensor: str
     layer: int | None
     expert: int | None
     role: str | None
     tensor_type: str
+    packed_expert_index: int | None
+    packed_expert_axis: int | None
     shape: tuple[int, int]
     rank_used: int
     singular_value_count: int
     participation_ratio: float
-    cosine_similarity_lowrank: float
+    explained_spectral_energy_rank_r: float
     fro_norm: float
     elapsed_seconds: float
     warnings: list[str] = field(default_factory=list)
@@ -70,9 +76,12 @@ class PerMatrixRecord:
 @dataclass(slots=True)
 class FailedMatrix:
     tensor: str
+    source_tensor: str
     layer: int | None
     expert: int | None
     role: str | None
+    packed_expert_index: int | None
+    packed_expert_axis: int | None
     reason: str
 
 
@@ -93,7 +102,7 @@ class SummaryDistribution:
 @dataclass(slots=True)
 class SummaryStats:
     participation_ratio: SummaryDistribution
-    cosine_similarity: SummaryDistribution
+    explained_spectral_energy_rank_r: SummaryDistribution
     counts: dict[str, Any]
 
 

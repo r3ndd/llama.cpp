@@ -47,7 +47,7 @@ def compute_summary(
     failed: list[FailedMatrix],
 ) -> SummaryStats:
     pr = [r.participation_ratio for r in per_matrix]
-    cs = [r.cosine_similarity_lowrank for r in per_matrix]
+    spectral = [r.explained_spectral_energy_rank_r for r in per_matrix]
 
     failed_reasons: Counter[str] = Counter(r.reason for r in failed)
 
@@ -61,6 +61,6 @@ def compute_summary(
 
     return SummaryStats(
         participation_ratio=_distribution(pr),
-        cosine_similarity=_distribution(cs),
+        explained_spectral_energy_rank_r=_distribution(spectral),
         counts=counts,
     )

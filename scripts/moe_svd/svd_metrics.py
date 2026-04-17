@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import math
-
 import numpy as np
 
 from .types import MatrixMetrics
@@ -34,27 +32,20 @@ def analyze_matrix(matrix: np.ndarray, rank_frac: float) -> MatrixMetrics:
         numer = float(np.square(np.sum(s2, dtype=np.float64), dtype=np.float64))
         participation_ratio = numer / denom
 
-    wr = (u[:, :rank_used] * s[:rank_used]) @ vt[:rank_used, :]
-
-    flat_w = matrix.ravel()
-    flat_wr = wr.ravel()
-
-    norm_w = float(np.linalg.norm(flat_w))
-    norm_wr = float(np.linalg.norm(flat_wr))
-    if norm_w == 0.0 or norm_wr == 0.0:
-        cosine_similarity = 0.0
-        warnings.append("zero_norm_for_cosine")
+    total_spectral_energy = float(np.sum(s2, dtype=np.float64))
+    retained_spectral_energy = float(np.sum(s2[:rank_used], dtype=np.float64))
+    if total_spectral_energy == 0.0:
+        explained_spectral_energy_rank_r = 0.0
+        warnings.append("zero_total_spectral_energy")
     else:
-        cosine_similarity = float(np.dot(flat_w, flat_wr) / (norm_w * norm_wr))
-        if not math.isfinite(cosine_similarity):
-            cosine_similarity = 0.0
-            warnings.append("non_finite_cosine")
-        cosine_similarity = max(-1.0, min(1.0, cosine_similarity))
+        explained_spectral_energy_rank_r = retained_spectral_energy / total_spectral_energy
 
     fro_norm = float(np.linalg.norm(matrix, ord="fro"))
 
-    if not math.isfinite(participation_ratio):
+    if not np.isfinite(participation_ratio):
         raise ValueError("Computed non-finite participation ratio")
+    if not np.isfinite(explained_spectral_energy_rank_r):
+        raise ValueError("Computed non-finite explained spectral energy")
 
     return MatrixMetrics(
         m=m,
@@ -62,7 +53,7 @@ def analyze_matrix(matrix: np.ndarray, rank_frac: float) -> MatrixMetrics:
         rank_used=rank_used,
         singular_value_count=int(s.shape[0]),
         participation_ratio=participation_ratio,
-        cosine_similarity_lowrank=cosine_similarity,
+        explained_spectral_energy_rank_r=explained_spectral_energy_rank_r,
         fro_norm=fro_norm,
         analysis_warnings=warnings,
     )
