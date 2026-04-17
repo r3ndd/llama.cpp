@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ProcessPoolExecutor, as_completed
+import multiprocessing as mp
 import os
 import subprocess
 import sys
@@ -20,7 +22,7 @@ from moe_svd.gguf_discovery import (
 from moe_svd.model_resolver import ModelResolutionError, resolve_model_path
 from moe_svd.reporting import ReportingError, print_cli_summary, write_json_report
 from moe_svd.stats import compute_summary
-from moe_svd.svd_metrics import analyze_matrix
+from moe_svd.svd_metrics import SPECTRAL_ENERGY_RANK_FRACTIONS, analyze_matrix
 from moe_svd.types import FailedMatrix, PerMatrixRecord, Report, SummaryDistribution, SummaryStats
 
 
@@ -29,6 +31,114 @@ EXIT_MODEL_RESOLUTION = 3
 EXIT_DISCOVERY = 4
 EXIT_ANALYSIS_ALL_FAILED = 5
 EXIT_WRITE_ERROR = 6
+
+
+def _set_blas_thread_env(threads: int) -> None:
+    value = str(threads)
+    os.environ["OPENBLAS_NUM_THREADS"] = value
+    os.environ["OMP_NUM_THREADS"] = value
+    os.environ["MKL_NUM_THREADS"] = value
+    os.environ["NUMEXPR_NUM_THREADS"] = value
+    os.environ["VECLIB_MAXIMUM_THREADS"] = value
+
+
+def _worker_init(blas_threads: int) -> None:
+    _set_blas_thread_env(blas_threads)
+
+
+def _build_record(
+    *,
+    ref,
+    metrics,
+    elapsed: float,
+) -> PerMatrixRecord:
+    return PerMatrixRecord(
+        tensor=ref.tensor_name,
+        source_tensor=ref.source_tensor_name,
+        layer=ref.layer,
+        expert=ref.expert,
+        role=ref.role,
+        tensor_type=ref.tensor_type,
+        packed_expert_index=ref.packed_expert_index,
+        packed_expert_axis=ref.packed_expert_axis,
+        shape=ref.shape,
+        rank_used=metrics.rank_used,
+        singular_value_count=metrics.singular_value_count,
+        participation_ratio=metrics.participation_ratio,
+        explained_spectral_energy_rank_fractions=metrics.explained_spectral_energy_rank_fractions,
+        fro_norm=metrics.fro_norm,
+        elapsed_seconds=elapsed,
+        warnings=metrics.analysis_warnings,
+    )
+
+
+def _build_failed(ref, reason: str) -> FailedMatrix:
+    return FailedMatrix(
+        tensor=ref.tensor_name,
+        source_tensor=ref.source_tensor_name,
+        layer=ref.layer,
+        expert=ref.expert,
+        role=ref.role,
+        packed_expert_index=ref.packed_expert_index,
+        packed_expert_axis=ref.packed_expert_axis,
+        reason=reason,
+    )
+
+
+def _partition_candidates_by_source(candidates, workers: int) -> list[list]:
+    grouped: dict[str, list] = {}
+    for ref in candidates:
+        grouped.setdefault(ref.source_tensor_name, []).append(ref)
+
+    groups = list(grouped.values())
+    groups.sort(
+        key=lambda batch: sum(r.shape[0] * r.shape[1] for r in batch),
+        reverse=True,
+    )
+
+    bucket_refs: list[list] = [[] for _ in range(workers)]
+    bucket_loads = [0 for _ in range(workers)]
+
+    for batch in groups:
+        idx = min(range(workers), key=lambda i: bucket_loads[i])
+        bucket_refs[idx].extend(batch)
+        bucket_loads[idx] += sum(r.shape[0] * r.shape[1] for r in batch)
+
+    return [bucket for bucket in bucket_refs if bucket]
+
+
+def _analyze_batch(
+    *,
+    gguf_path: str,
+    dtype: str,
+    rank_frac: float,
+    refs: list,
+) -> tuple[list[PerMatrixRecord], list[FailedMatrix]]:
+    local_per_matrix: list[PerMatrixRecord] = []
+    local_failed: list[FailedMatrix] = []
+    load_cache: dict[str, object] = {}
+
+    reader = open_gguf_reader(gguf_path)
+
+    for ref in refs:
+        t0 = time.perf_counter()
+        try:
+            matrix = load_matrix_from_reader(
+                reader=reader,
+                matrix_ref=ref,
+                dtype=dtype,
+                cache=load_cache,
+            )
+            if not np.isfinite(matrix).all():
+                raise ValueError("non_finite_values_after_dequantization")
+
+            metrics = analyze_matrix(matrix=matrix, rank_frac=rank_frac)
+            elapsed = time.perf_counter() - t0
+            local_per_matrix.append(_build_record(ref=ref, metrics=metrics, elapsed=elapsed))
+        except Exception as exc:
+            local_failed.append(_build_failed(ref, f"{type(exc).__name__}: {exc}"))
+
+    return local_per_matrix, local_failed
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -91,6 +201,18 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Reduce terminal output.",
     )
     parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help="Number of worker processes for matrix analysis. Default: 1.",
+    )
+    parser.add_argument(
+        "--blas-threads",
+        type=int,
+        default=1,
+        help="BLAS/OpenMP threads per process. Default: 1.",
+    )
+    parser.add_argument(
         "--full-svd",
         action="store_true",
         help="Explicitly select full SVD mode (required by pilot design).",
@@ -107,6 +229,12 @@ def validate_args(args: argparse.Namespace, parser: argparse.ArgumentParser) -> 
 
     if args.max_matrices is not None and args.max_matrices <= 0:
         parser.error("--max-matrices must be > 0 when provided.")
+
+    if args.workers <= 0:
+        parser.error("--workers must be > 0.")
+
+    if args.blas_threads <= 0:
+        parser.error("--blas-threads must be > 0.")
 
     if not args.full_svd:
         parser.error("--full-svd is required for this fidelity-first analysis utility.")
@@ -127,7 +255,8 @@ def _empty_summary(total_tensors: int, candidates: int, skipped_reasons: Counter
     )
     return SummaryStats(
         participation_ratio=empty,
-        explained_spectral_energy_rank_r=empty,
+        spectral_energy_rank_fractions=list(SPECTRAL_ENERGY_RANK_FRACTIONS),
+        explained_spectral_energy_rank_fractions_mean=[0.0 for _ in SPECTRAL_ENERGY_RANK_FRACTIONS],
         counts={
             "total_tensors": total_tensors,
             "candidates": candidates,
@@ -160,6 +289,8 @@ def _build_report(
         "rank_fraction": args.rank_frac,
         "dtype": args.dtype,
         "fidelity_mode": "full_svd",
+        "workers": args.workers,
+        "blas_threads": args.blas_threads,
         "max_matrices": args.max_matrices,
         "fail_fast": args.fail_fast,
         "runtime_seconds": total_runtime_s,
@@ -177,11 +308,12 @@ def _build_report(
 
     caveats = [
         "Pilot run may use quantized GGUF weights (e.g. Q4_K_M). Quantization can bias singular spectra and compressibility metrics relative to FP16/BF16 checkpoints.",
-        "Analysis uses exact full SVD and sequential processing for fidelity and predictable memory behavior.",
+        "Analysis uses exact full-spectrum singular values with compute_uv=False; this is mathematically equivalent for current metrics while reducing overhead.",
+        "Parallel workers use process-based execution and should be paired with conservative BLAS thread settings to avoid oversubscription.",
     ]
 
     return Report(
-        schema_version="1.0",
+        schema_version="1.1",
         run=run,
         discovery=discovery_payload,
         per_matrix=per_matrix,
@@ -239,11 +371,7 @@ def main(argv: list[str]) -> int:
     failed: list[FailedMatrix] = []
     skipped_reasons = Counter(s.reason for s in discovery.skipped)
 
-    try:
-        reader = open_gguf_reader(resolved.local_path)
-    except DiscoveryError as exc:
-        print(f"[error:discovery] {exc}", file=sys.stderr)
-        return EXIT_DISCOVERY
+    _set_blas_thread_env(args.blas_threads)
 
     if not args.quiet:
         print(
@@ -253,54 +381,70 @@ def main(argv: list[str]) -> int:
             f"skipped={len(discovery.skipped)}",
         )
 
-    for idx, ref in enumerate(candidates, start=1):
-        t0 = time.perf_counter()
+    if args.workers == 1 or args.fail_fast:
+        load_cache: dict[str, object] = {}
         try:
-            matrix = load_matrix_from_reader(reader=reader, matrix_ref=ref, dtype=args.dtype)
-            if not np.isfinite(matrix).all():
-                raise ValueError("non_finite_values_after_dequantization")
+            reader = open_gguf_reader(resolved.local_path)
+        except DiscoveryError as exc:
+            print(f"[error:discovery] {exc}", file=sys.stderr)
+            return EXIT_DISCOVERY
 
-            metrics = analyze_matrix(matrix=matrix, rank_frac=args.rank_frac)
-            elapsed = time.perf_counter() - t0
+        for idx, ref in enumerate(candidates, start=1):
+            t0 = time.perf_counter()
+            try:
+                matrix = load_matrix_from_reader(
+                    reader=reader,
+                    matrix_ref=ref,
+                    dtype=args.dtype,
+                    cache=load_cache,
+                )
+                if not np.isfinite(matrix).all():
+                    raise ValueError("non_finite_values_after_dequantization")
 
-            per_matrix.append(
-                PerMatrixRecord(
-                    tensor=ref.tensor_name,
-                    source_tensor=ref.source_tensor_name,
-                    layer=ref.layer,
-                    expert=ref.expert,
-                    role=ref.role,
-                    tensor_type=ref.tensor_type,
-                    packed_expert_index=ref.packed_expert_index,
-                    packed_expert_axis=ref.packed_expert_axis,
-                    shape=ref.shape,
-                    rank_used=metrics.rank_used,
-                    singular_value_count=metrics.singular_value_count,
-                    participation_ratio=metrics.participation_ratio,
-                    explained_spectral_energy_rank_r=metrics.explained_spectral_energy_rank_r,
-                    fro_norm=metrics.fro_norm,
-                    elapsed_seconds=elapsed,
-                    warnings=metrics.analysis_warnings,
-                ),
-            )
-        except Exception as exc:
-            failed.append(
-                FailedMatrix(
-                    tensor=ref.tensor_name,
-                    source_tensor=ref.source_tensor_name,
-                    layer=ref.layer,
-                    expert=ref.expert,
-                    role=ref.role,
-                    packed_expert_index=ref.packed_expert_index,
-                    packed_expert_axis=ref.packed_expert_axis,
-                    reason=f"{type(exc).__name__}: {exc}",
-                ),
-            )
-            if args.fail_fast:
-                break
-        finally:
-            if not args.quiet and idx % 10 == 0:
-                print(f"Processed {idx}/{len(candidates)} matrices...")
+                metrics = analyze_matrix(matrix=matrix, rank_frac=args.rank_frac)
+                elapsed = time.perf_counter() - t0
+                per_matrix.append(_build_record(ref=ref, metrics=metrics, elapsed=elapsed))
+            except Exception as exc:
+                failed.append(_build_failed(ref, f"{type(exc).__name__}: {exc}"))
+                if args.fail_fast:
+                    break
+            finally:
+                if not args.quiet and idx % 10 == 0:
+                    print(f"Processed {idx}/{len(candidates)} matrices...")
+    else:
+        batches = _partition_candidates_by_source(candidates, min(args.workers, len(candidates)))
+        mp_ctx = mp.get_context("spawn")
+        with ProcessPoolExecutor(
+            max_workers=min(args.workers, len(batches)),
+            initializer=_worker_init,
+            initargs=(args.blas_threads,),
+            mp_context=mp_ctx,
+        ) as executor:
+            future_map = {
+                executor.submit(
+                    _analyze_batch,
+                    gguf_path=resolved.local_path,
+                    dtype=args.dtype,
+                    rank_frac=args.rank_frac,
+                    refs=batch,
+                ): batch
+                for batch in batches
+            }
+
+            processed = 0
+            for future in as_completed(future_map):
+                batch = future_map[future]
+                try:
+                    batch_per_matrix, batch_failed = future.result()
+                except Exception as exc:
+                    batch_per_matrix = []
+                    batch_failed = [_build_failed(ref, f"WorkerError: {exc}") for ref in batch]
+
+                per_matrix.extend(batch_per_matrix)
+                failed.extend(batch_failed)
+                processed += len(batch)
+                if not args.quiet:
+                    print(f"Processed {processed}/{len(candidates)} matrices...")
 
     per_matrix.sort(key=lambda r: (r.layer if r.layer is not None else -1, r.expert if r.expert is not None else -1, r.tensor))
     failed.sort(key=lambda r: (r.layer if r.layer is not None else -1, r.expert if r.expert is not None else -1, r.tensor))

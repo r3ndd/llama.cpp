@@ -5,6 +5,7 @@ from typing import Any
 
 import numpy as np
 
+from .svd_metrics import SPECTRAL_ENERGY_RANK_FRACTIONS
 from .types import FailedMatrix, PerMatrixRecord, SummaryDistribution, SummaryStats
 
 
@@ -47,7 +48,7 @@ def compute_summary(
     failed: list[FailedMatrix],
 ) -> SummaryStats:
     pr = [r.participation_ratio for r in per_matrix]
-    spectral = [r.explained_spectral_energy_rank_r for r in per_matrix]
+    spectral_by_matrix = [r.explained_spectral_energy_rank_fractions for r in per_matrix]
 
     failed_reasons: Counter[str] = Counter(r.reason for r in failed)
 
@@ -59,8 +60,17 @@ def compute_summary(
         "failed_by_reason": dict(sorted(failed_reasons.items())),
     }
 
+    if spectral_by_matrix:
+        spectral_arr = np.asarray(spectral_by_matrix, dtype=np.float64)
+        explained_spectral_energy_rank_fractions_mean = list(np.mean(spectral_arr, axis=0).tolist())
+        spectral_energy_rank_fractions = list(SPECTRAL_ENERGY_RANK_FRACTIONS)
+    else:
+        spectral_energy_rank_fractions = list(SPECTRAL_ENERGY_RANK_FRACTIONS)
+        explained_spectral_energy_rank_fractions_mean = [0.0 for _ in spectral_energy_rank_fractions]
+
     return SummaryStats(
         participation_ratio=_distribution(pr),
-        explained_spectral_energy_rank_r=_distribution(spectral),
+        spectral_energy_rank_fractions=spectral_energy_rank_fractions,
+        explained_spectral_energy_rank_fractions_mean=explained_spectral_energy_rank_fractions_mean,
         counts=counts,
     )

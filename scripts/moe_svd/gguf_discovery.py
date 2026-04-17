@@ -290,20 +290,47 @@ def open_gguf_reader(gguf_path: str) -> Any:
         raise DiscoveryError(f"Failed to read GGUF file '{gguf_path}': {exc}") from exc
 
 
-def load_matrix_from_reader(reader: Any, matrix_ref: MatrixRef, dtype: str) -> Any:
+def load_matrix_from_reader(
+    reader: Any,
+    matrix_ref: MatrixRef,
+    dtype: str,
+    cache: dict[str, Any] | None = None,
+) -> Any:
     gguf = _load_gguf_module()
 
     source_tensor_name = matrix_ref.source_tensor_name
-    tensor = next((t for t in reader.tensors if t.name == source_tensor_name), None)
+    tensor_lookup = getattr(reader, "_moe_svd_tensor_lookup", None)
+    if tensor_lookup is None:
+        tensor_lookup = {t.name: t for t in reader.tensors}
+        setattr(reader, "_moe_svd_tensor_lookup", tensor_lookup)
+
+    tensor = tensor_lookup.get(source_tensor_name)
     if tensor is None:
         raise DiscoveryError(f"Tensor not found in GGUF: {source_tensor_name}")
 
-    try:
-        matrix = gguf.dequantize(tensor.data, tensor.tensor_type)
-    except Exception as exc:
-        raise DiscoveryError(
-            f"Failed to dequantize tensor '{source_tensor_name}': {exc}",
-        ) from exc
+    matrix: Any | None = None
+    if cache is not None:
+        if (
+            cache.get("source_tensor_name") == source_tensor_name
+            and cache.get("dtype") == dtype
+            and cache.get("matrix") is not None
+        ):
+            matrix = cache["matrix"]
+
+    if matrix is None:
+        try:
+            matrix = gguf.dequantize(tensor.data, tensor.tensor_type)
+        except Exception as exc:
+            raise DiscoveryError(
+                f"Failed to dequantize tensor '{source_tensor_name}': {exc}",
+            ) from exc
+
+        matrix = matrix.astype("float32" if dtype == "float32" else "float64", copy=False)
+        if cache is not None:
+            cache.clear()
+            cache["source_tensor_name"] = source_tensor_name
+            cache["dtype"] = dtype
+            cache["matrix"] = matrix
 
     if matrix_ref.packed_expert_index is None:
         if matrix.ndim != 2:
@@ -329,7 +356,12 @@ def load_matrix_from_reader(reader: Any, matrix_ref: MatrixRef, dtype: str) -> A
                 f"Packed tensor '{source_tensor_name}' expert index {expert_idx} out of bounds for shape {matrix.shape}",
             )
 
-        matrix_2d = matrix.take(indices=expert_idx, axis=axis)
+        if axis == 0:
+            matrix_2d = matrix[expert_idx, :, :]
+        elif axis == 1:
+            matrix_2d = matrix[:, expert_idx, :]
+        else:
+            matrix_2d = matrix[:, :, expert_idx]
         if matrix_2d.ndim != 2:
             raise DiscoveryError(
                 f"Packed tensor '{source_tensor_name}' expert slice {expert_idx} yielded non-2D shape {matrix_2d.shape}",
@@ -342,6 +374,4 @@ def load_matrix_from_reader(reader: Any, matrix_ref: MatrixRef, dtype: str) -> A
                 f"Tensor '{source_tensor_name}' produced shape {actual_shape}, expected {matrix_ref.shape}",
             )
 
-    if dtype == "float32":
-        return matrix_2d.astype("float32", copy=False)
-    return matrix_2d.astype("float64", copy=False)
+    return matrix_2d

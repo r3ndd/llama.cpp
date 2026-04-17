@@ -153,3 +153,53 @@ def test_load_matrix_from_reader_validates_expected_shape(monkeypatch) -> None:
 
     with pytest.raises(discovery.DiscoveryError, match="produced shape"):
         discovery.load_matrix_from_reader(reader=reader, matrix_ref=ref, dtype="float32")
+
+
+def test_load_matrix_from_reader_reuses_dequantized_tensor_for_packed_slices(monkeypatch) -> None:
+    packed = np.arange(2 * 3 * 4, dtype=np.float32).reshape(2, 3, 4)
+    fake_tensor = SimpleNamespace(
+        name="blk.0.ffn_gate_exps.weight",
+        data=packed,
+        tensor_type=_FakeTensorType("F32"),
+    )
+    reader = SimpleNamespace(tensors=[fake_tensor])
+
+    calls = {"count": 0}
+
+    def _dequantize(data, _tensor_type):
+        calls["count"] += 1
+        return data
+
+    fake_gguf = SimpleNamespace(dequantize=_dequantize)
+    monkeypatch.setattr(discovery, "_load_gguf_module", lambda: fake_gguf)
+
+    ref0 = MatrixRef(
+        tensor_name="blk.0.ffn_gate_exps.weight::expert[0]",
+        source_tensor_name="blk.0.ffn_gate_exps.weight",
+        shape=(2, 3),
+        layer=0,
+        expert=0,
+        role="gate",
+        tensor_type="F32",
+        packed_expert_index=0,
+        packed_expert_axis=2,
+    )
+    ref1 = MatrixRef(
+        tensor_name="blk.0.ffn_gate_exps.weight::expert[1]",
+        source_tensor_name="blk.0.ffn_gate_exps.weight",
+        shape=(2, 3),
+        layer=0,
+        expert=1,
+        role="gate",
+        tensor_type="F32",
+        packed_expert_index=1,
+        packed_expert_axis=2,
+    )
+
+    cache: dict[str, object] = {}
+    matrix0 = discovery.load_matrix_from_reader(reader=reader, matrix_ref=ref0, dtype="float32", cache=cache)
+    matrix1 = discovery.load_matrix_from_reader(reader=reader, matrix_ref=ref1, dtype="float32", cache=cache)
+
+    assert calls["count"] == 1
+    assert np.array_equal(matrix0, packed[:, :, 0])
+    assert np.array_equal(matrix1, packed[:, :, 1])

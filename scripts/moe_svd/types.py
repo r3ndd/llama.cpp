@@ -48,7 +48,7 @@ class MatrixMetrics:
     rank_used: int
     singular_value_count: int
     participation_ratio: float
-    explained_spectral_energy_rank_r: float
+    explained_spectral_energy_rank_fractions: list[float]
     fro_norm: float
     analysis_warnings: list[str] = field(default_factory=list)
 
@@ -67,7 +67,7 @@ class PerMatrixRecord:
     rank_used: int
     singular_value_count: int
     participation_ratio: float
-    explained_spectral_energy_rank_r: float
+    explained_spectral_energy_rank_fractions: list[float]
     fro_norm: float
     elapsed_seconds: float
     warnings: list[str] = field(default_factory=list)
@@ -102,7 +102,8 @@ class SummaryDistribution:
 @dataclass(slots=True)
 class SummaryStats:
     participation_ratio: SummaryDistribution
-    explained_spectral_energy_rank_r: SummaryDistribution
+    spectral_energy_rank_fractions: list[float]
+    explained_spectral_energy_rank_fractions_mean: list[float]
     counts: dict[str, Any]
 
 

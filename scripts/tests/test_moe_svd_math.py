@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from moe_svd.svd_metrics import analyze_matrix, rank_from_fraction
+from moe_svd.svd_metrics import SPECTRAL_ENERGY_RANK_FRACTIONS, analyze_matrix, rank_from_fraction
 
 
 def test_rank_from_fraction_rounding_and_minimum() -> None:
@@ -26,7 +26,8 @@ def test_zero_matrix_guards() -> None:
     metrics = analyze_matrix(w, rank_frac=0.25)
 
     assert metrics.participation_ratio == 0.0
-    assert metrics.explained_spectral_energy_rank_r == 0.0
+    assert len(metrics.explained_spectral_energy_rank_fractions) == len(SPECTRAL_ENERGY_RANK_FRACTIONS)
+    assert all(x == 0.0 for x in metrics.explained_spectral_energy_rank_fractions)
     assert "zero_singular_values_denominator" in metrics.analysis_warnings
     assert "zero_total_spectral_energy" in metrics.analysis_warnings
 
@@ -35,5 +36,10 @@ def test_explained_spectral_energy_uses_singular_values() -> None:
     w = np.diag(np.array([5.0, 4.0, 3.0, 0.0], dtype=np.float64))
     metrics = analyze_matrix(w, rank_frac=0.5)
 
-    expected = (5.0**2 + 4.0**2) / (5.0**2 + 4.0**2 + 3.0**2)
-    assert np.isclose(metrics.explained_spectral_energy_rank_r, expected)
+    idx_50 = list(SPECTRAL_ENERGY_RANK_FRACTIONS).index(0.50)
+    expected_50 = (5.0**2 + 4.0**2) / (5.0**2 + 4.0**2 + 3.0**2)
+    assert np.isclose(metrics.explained_spectral_energy_rank_fractions[idx_50], expected_50)
+
+    idx_05 = list(SPECTRAL_ENERGY_RANK_FRACTIONS).index(0.05)
+    expected_05 = (5.0**2) / (5.0**2 + 4.0**2 + 3.0**2)
+    assert np.isclose(metrics.explained_spectral_energy_rank_fractions[idx_05], expected_05)

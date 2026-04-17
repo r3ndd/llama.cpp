@@ -5,10 +5,12 @@ from collections import Counter
 import pytest
 
 from moe_svd.stats import compute_summary
+from moe_svd.svd_metrics import SPECTRAL_ENERGY_RANK_FRACTIONS
 from moe_svd.types import FailedMatrix, PerMatrixRecord
 
 
-def _record(pr: float, spectral: float) -> PerMatrixRecord:
+def _record(pr: float, spectral_base: float) -> PerMatrixRecord:
+    spectral = [min(1.0, spectral_base + i * 0.001) for i in range(len(SPECTRAL_ENERGY_RANK_FRACTIONS))]
     return PerMatrixRecord(
         tensor="t",
         source_tensor="t",
@@ -22,7 +24,7 @@ def _record(pr: float, spectral: float) -> PerMatrixRecord:
         rank_used=1,
         singular_value_count=4,
         participation_ratio=pr,
-        explained_spectral_energy_rank_r=spectral,
+        explained_spectral_energy_rank_fractions=spectral,
         fro_norm=1.0,
         elapsed_seconds=0.1,
         warnings=[],
@@ -64,7 +66,9 @@ def test_compute_summary_counts_and_percentiles() -> None:
 
     assert summary.participation_ratio.count == 3
     assert summary.participation_ratio.mean == 2.0
-    assert summary.explained_spectral_energy_rank_r.mean == pytest.approx(0.8)
+    assert summary.spectral_energy_rank_fractions == list(SPECTRAL_ENERGY_RANK_FRACTIONS)
+    assert summary.explained_spectral_energy_rank_fractions_mean[0] == pytest.approx(0.8)
+    assert len(summary.explained_spectral_energy_rank_fractions_mean) == 19
     assert summary.counts["total_tensors"] == 10
     assert summary.counts["candidates"] == 5
     assert summary.counts["analyzed"] == 3
@@ -81,5 +85,6 @@ def test_compute_summary_empty() -> None:
     )
 
     assert summary.participation_ratio.count == 0
-    assert summary.explained_spectral_energy_rank_r.count == 0
+    assert summary.spectral_energy_rank_fractions == list(SPECTRAL_ENERGY_RANK_FRACTIONS)
+    assert all(x == 0.0 for x in summary.explained_spectral_energy_rank_fractions_mean)
     assert summary.counts["analyzed"] == 0

@@ -35,7 +35,10 @@ def print_cli_summary(report: Report, quiet: bool) -> None:
         f"analyzed={counts['analyzed']} failed={len(report.failed_matrices)}",
     )
     print(_fmt_dist("Participation ratio", report.summary.participation_ratio))
-    print(_fmt_dist("Explained spectral energy (rank-r)", report.summary.explained_spectral_energy_rank_r))
+    fractions = report.summary.spectral_energy_rank_fractions
+    means = report.summary.explained_spectral_energy_rank_fractions_mean
+    formatted = ", ".join(f"{int(frac * 100)}%={value:.6f}" for frac, value in zip(fractions, means))
+    print(f"Explained spectral energy (rank fractions): {formatted}")
 
     if counts["skipped_by_reason"]:
         print("Skipped by reason:")
