@@ -17,6 +17,8 @@ from molr.types import (
     MOLR_BUNDLE_MANIFEST_SCHEMA_VERSION,
     MOLR_EXPERT_CHECKPOINT_SCHEMA_VERSION,
     MOLR_PLAN_SCHEMA_VERSION,
+    MOLR_RUNTIME_CONFIG_SCHEMA_VERSION,
+    MOLR_RUNTIME_TELEMETRY_SCHEMA_VERSION,
     MOLR_THRESHOLDS_SCHEMA_VERSION,
 )
 
@@ -95,6 +97,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         action="store_true",
         help="Fail if any plan expert is missing checkpoint coverage.",
     )
+    parser.add_argument(
+        "--emit-runtime-config-template",
+        action="store_true",
+        help=(
+            "Emit bundle/runtime_config.template.json with MoLR disabled by default. "
+            "Used for guarded Phase-4 runtime integration."
+        ),
+    )
     args = parser.parse_args(argv)
     return args
 
@@ -149,6 +159,25 @@ def _plan_keys(plan: dict[str, Any]) -> set[tuple[int, int]]:
     for entry in plan.get("experts", []):
         out.add((int(entry.get("layer")), int(entry.get("expert"))))
     return out
+
+
+def _emit_runtime_config_template(out_dir: Path, *, quality_profiles: dict[str, Any]) -> Path:
+    profile_names = sorted(str(name) for name in quality_profiles.keys())
+    preferred_profile = "balanced" if "balanced" in quality_profiles else (profile_names[0] if profile_names else "")
+    payload = {
+        "schema_version": MOLR_RUNTIME_CONFIG_SCHEMA_VERSION,
+        "enabled": False,
+        "quality_profile": preferred_profile,
+        "fallback_threshold": None,
+        "telemetry_enabled": True,
+        "notes": [
+            "MoLR is disabled by default for rollback-safe behavior.",
+            "Set enabled=true and either quality_profile or fallback_threshold for explicit opt-in.",
+        ],
+    }
+    out_path = out_dir / "runtime_config.template.json"
+    _save_json(out_path, payload)
+    return out_path
 
 
 def _validate_checkpoint(path: Path, expected_model: str) -> tuple[int, int]:
@@ -254,10 +283,12 @@ def main(argv: list[str]) -> int:
             "bundle_layout_version": "molr_bundle.layout.v1",
             "model_spec": args.model,
             "compatibility": {
-                "runtime_contract": "phase3_offline_bundle",
+                "runtime_contract": "phase4_opt_in_runtime_bundle",
                 "plan_schema_version": MOLR_PLAN_SCHEMA_VERSION,
                 "thresholds_schema_version": MOLR_THRESHOLDS_SCHEMA_VERSION,
                 "checkpoint_schema_version": MOLR_EXPERT_CHECKPOINT_SCHEMA_VERSION,
+                "runtime_config_schema_version": MOLR_RUNTIME_CONFIG_SCHEMA_VERSION,
+                "runtime_telemetry_schema_version": MOLR_RUNTIME_TELEMETRY_SCHEMA_VERSION,
             },
             "inputs": {
                 "plan_json": str(plan_path),
@@ -287,7 +318,26 @@ def main(argv: list[str]) -> int:
                 "quality_profiles": thresholds.get("quality_profiles", {}),
                 "lookup_table_entries": len(thresholds.get("lookup_table", [])),
             },
+            "runtime_defaults": {
+                "enabled": False,
+                "require_explicit_opt_in": True,
+                "fallback_policy": "pred_error_mean > threshold",
+                "telemetry_fields": [
+                    "calls_total",
+                    "fallback_calls_total",
+                    "predicted_error_mean",
+                    "avg_molr_latency_ms",
+                    "avg_fallback_latency_ms",
+                ],
+            },
         }
+        if args.emit_runtime_config_template:
+            runtime_cfg_path = _emit_runtime_config_template(
+                out_dir,
+                quality_profiles=thresholds.get("quality_profiles", {}),
+            )
+            manifest["runtime_defaults"]["runtime_config_template_path"] = str(runtime_cfg_path)
+
         manifest_path = out_dir / "molr_bundle_manifest.json"
         _save_json(manifest_path, manifest)
 

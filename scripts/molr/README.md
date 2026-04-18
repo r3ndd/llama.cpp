@@ -1,4 +1,4 @@
-# MoLR scripts (Phase 0 + Phase 3)
+# MoLR scripts (Phase 0 + Phase 4)
 
 This directory contains operator scaffolding for the MoLR pilot workflow.
 
@@ -6,6 +6,7 @@ This directory contains operator scaffolding for the MoLR pilot workflow.
 - **Phase 1**: plan generation from SVD report and covariance artifact contracts
 - **Phase 2**: per-expert MoLR training + merged validation/failure reporting
 - **Phase 3**: fallback calibration + bundle packaging manifest
+- **Phase 4**: guarded runtime integration scaffold (opt-in config + telemetry + shadow harness)
 
 Phase 0 goal (from design): produce and archive a reproducible spectral baseline using existing
 `scripts/analyze_moe_svd.py` for pilot model:
@@ -262,5 +263,67 @@ Bundle outputs:
 - `bundle/checkpoints/molr_expert_<layer>_<expert>.npz`
 - `bundle/molr_bundle_manifest.json` (`molr_bundle_manifest.v1`)
 
+Use `--emit-runtime-config-template` to also emit:
+- `bundle/runtime_config.template.json` (disabled by default; explicit opt-in required)
+
 Use `--require-all-plan-experts` to hard-fail packaging if any expert from `molr_plan.json`
 does not have a packaged checkpoint.
+
+## Phase 4 usage (guarded runtime scaffold)
+
+Phase 4 in this directory intentionally keeps default inference behavior unchanged and provides
+opt-in runtime contracts + shadow validation scaffolding.
+
+### 10) Emit telemetry snapshot from runtime event logs
+
+```bash
+python scripts/molr/runtime_telemetry.py \
+  --events-jsonl "<run>/runtime_events.jsonl" \
+  --model "unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M" \
+  --out-json "<run>/molr_runtime_telemetry.json"
+```
+
+Telemetry schema version:
+- `molr_runtime_telemetry.v1`
+
+Expected per-line event fields (JSONL):
+- `layer` (int)
+- `expert` (int)
+- `used_fallback` (bool)
+- `predicted_error` (float)
+- `molr_latency_ms` (float)
+- `fallback_latency_ms` (float)
+
+### 11) Validate bundle + runtime config and summarize shadow telemetry
+
+```bash
+python scripts/molr/runtime_shadow.py \
+  --bundle-dir "<run>/bundle" \
+  --runtime-config-json "<run>/runtime_config.json" \
+  --telemetry-json "<run>/molr_runtime_telemetry.json" \
+  --model "unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M" \
+  --require-explicit-enable \
+  --out-json "<run>/molr_runtime_shadow_report.json"
+```
+
+Shadow report schema version:
+- `molr_runtime_shadow_report.v1`
+
+What this validates:
+- bundle manifest/plan/threshold/checkpoint compatibility contracts,
+- runtime config opt-in state and threshold resolution,
+- telemetry counters for fallback rate and MoLR-vs-fallback latency comparisons,
+- auto-disable recommendations for high fallback-rate / high latency-ratio experts.
+
+### Runtime config contract (Phase 4 scaffold)
+
+`runtime_config.json` fields:
+- `schema_version`: `molr_runtime_config.v1`
+- `enabled`: bool (must be `true` when `--require-explicit-enable` is used)
+- one of:
+  - `quality_profile`: profile name from `molr_thresholds.json`, or
+  - `fallback_threshold`: explicit numeric threshold
+- `telemetry_enabled`: bool
+
+Rollback-safe default:
+- Keep `enabled=false` (default) to preserve baseline full-expert behavior.
