@@ -1,9 +1,10 @@
-# MoLR scripts (Phase 0 + Phase 1)
+# MoLR scripts (Phase 0 + Phase 2)
 
 This directory contains operator scaffolding for the MoLR pilot workflow.
 
 - **Phase 0**: spectral baseline capture/archive around `scripts/analyze_moe_svd.py`
 - **Phase 1**: plan generation from SVD report and covariance artifact contracts
+- **Phase 2**: per-expert MoLR training + merged validation/failure reporting
 
 Phase 0 goal (from design): produce and archive a reproducible spectral baseline using existing
 `scripts/analyze_moe_svd.py` for pilot model:
@@ -35,6 +36,27 @@ Phase 0 goal (from design): produce and archive a reproducible spectral baseline
   - emits `covariance_stats.npz` + `covariance_summary.json`,
   - tracks explicit per-expert failure reasons,
   - supports `--allow-empty` for scaffold-only runs when routed-input capture integration is not yet wired.
+
+## What is included in Phase 2
+
+- `train_expert_molr.py`: trains one expert MoLR from:
+  - `molr_plan.json` (rank/K/init partition contract),
+  - `covariance_stats.npz` (`mu`, `chol` for the expert),
+  - full expert weights NPZ (`gate/up/down` or `w1/w3/w2` aliases).
+- Training objective contract:
+  - `L_total = L_mse + λ_lb * L_load_balance + λ_err * L_error_head`
+  - `L_mse`: output MSE to frozen full expert targets,
+  - `L_load_balance`: sum of squared batch-mean router weights,
+  - `L_error_head`: MSE(predicted_error, true_error_detached), with detached true-error target.
+- Validation metrics emitted per expert:
+  - cosine similarity mean,
+  - relative output norm error mean,
+  - router entropy mean,
+  - error-head Pearson correlation.
+- `train_all_experts.py`: orchestrates expert-by-expert training and emits:
+  - merged validation report (`molr_validation_report.json`),
+  - failure ledger (`molr_failure_ledger.json`),
+  - per-expert checkpoints and validation JSON files.
 
 ## 1) Produce the baseline SVD report
 
@@ -150,3 +172,43 @@ python scripts/molr/capture_expert_covariance.py \
   --out-npz "<run>/covariance_stats.npz" \
   --out-json "<run>/covariance_summary.json"
 ```
+
+## Phase 2 usage
+
+### 6) Train a single expert
+
+```bash
+python scripts/molr/train_expert_molr.py \
+  --model "unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M" \
+  --plan-json "<run>/molr_plan.json" \
+  --cov-npz "<run>/covariance_stats.npz" \
+  --weights-npz "<run>/expert_weights_12_34.npz" \
+  --layer 12 \
+  --expert 34 \
+  --steps 20000 \
+  --batch-size 512 \
+  --lr 1e-4 \
+  --out-checkpoint "<run>/checkpoints/molr_expert_12_34.npz" \
+  --out-validation "<run>/validation/molr_validation_12_34.json"
+```
+
+### 7) Train all experts (orchestrated)
+
+```bash
+python scripts/molr/train_all_experts.py \
+  --model "unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M" \
+  --plan-json "<run>/molr_plan.json" \
+  --cov-npz "<run>/covariance_stats.npz" \
+  --weights-dir "<run>/expert_weights" \
+  --weights-pattern "expert_weights_{layer}_{expert}.npz" \
+  --steps 20000 \
+  --batch-size 512 \
+  --lr 1e-4 \
+  --out-dir "<run>/phase2"
+```
+
+Key outputs under `--out-dir`:
+- `checkpoints/molr_expert_<layer>_<expert>.npz`
+- `validation/molr_validation_<layer>_<expert>.json`
+- `molr_validation_report.json`
+- `molr_failure_ledger.json`

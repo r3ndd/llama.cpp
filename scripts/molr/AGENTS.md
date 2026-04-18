@@ -1,12 +1,20 @@
 # Notes for `scripts/molr`
 
-- Phase 0 tooling assumes `svd_report.json` schema `1.1` and requires `run.fidelity_mode == "full_svd"`; reject mismatches unless model mismatch is explicitly allowed.
-- Keep Phase 0 check/archive CLIs separate: validation-only checks should not depend on archive-specific args like `--run-dir`.
-- Coverage plausibility is intentionally lightweight (`candidates > 0`, `analyzed > 0`, analyzed/candidates ratio heuristic, layer/expert presence) and should stay stable for operator checklist gating.
-- `--strict-coverage` is a policy gate: any non-`pass` plausibility status (including `warn`) must fail archive/check commands.
-- In `archive_phase0_baseline.py`, metadata command/model fields must reflect `svd_report.run.model_spec` when `--allow-model-mismatch` is used; otherwise archived reproduction metadata becomes misleading.
-- `check_phase0_svd_report.py` treats quantization-caveat visibility as string presence in `assumptions_and_caveats` (`"Q4_K_M"`), so report wording changes can silently affect that signal.
-- Phase 1 plan generation (`plan_from_svd.py`) intentionally consumes the fixed 19-point `SPECTRAL_ENERGY_RANK_FRACTIONS` grid from `moe_svd.svd_metrics`; if target energy is not met on that grid, it escalates to full rank and records this explicitly.
-- Keep artifact schema constants centralized in `scripts/molr/types.py` (`molr_plan.v1`, covariance schema versions, SVD schema coupling) so Phase 0/1 tools stay contract-aligned.
-- `capture_expert_covariance.py` is contract-driven in Phase 1: it consumes pre-captured routed inputs NPZ (`inputs/layers/experts`) and supports explicit `--allow-empty` scaffold outputs until runtime routed capture integration exists.
-- In covariance summaries, `observed.experts_observed_total` must count all unique `(layer, expert)` pairs in the routed-input contract before `--max-experts` truncation; `experts_processed_total` reflects the post-cap subset.
+## Phase 0/1 contracts
+
+- Phase 0 accepts only `svd_report.json` schema `1.1` with `run.fidelity_mode == "full_svd"`; model mismatch is reject-by-default and only allowed via explicit override.
+- Coverage plausibility is intentionally checklist-light (`candidates/analyzed > 0`, analyzed/candidates heuristic, layer/expert presence); `--strict-coverage` upgrades any non-`pass` (including `warn`) to hard failure.
+- Quantization-caveat checks are string-coupled (`"Q4_K_M"` in `assumptions_and_caveats`), so caveat wording edits can silently change pass/fail signals.
+- When `--allow-model-mismatch` is used for archiving, run metadata should be anchored to `svd_report.run.model_spec` so replay metadata matches the analyzed artifact.
+- Plan generation is contract-coupled to the fixed 19-point `SPECTRAL_ENERGY_RANK_FRACTIONS` grid from `scripts/moe_svd/svd_metrics.py`; unmet target energy on that grid escalates to full rank with explicit annotation.
+- Keep schema/version constants centralized in `scripts/molr/types.py` so Phase 0/1/2 tools stay artifact-compatible.
+- Covariance capture consumes routed-input NPZ contract arrays (`inputs`, `layers`, `experts`) and permits explicit scaffold artifacts via `--allow-empty`.
+- Covariance summary counters are split by intent: `experts_observed_total` counts unique routed pairs before any `--max-experts` cap; `experts_processed_total` reflects post-cap execution.
+
+## Phase 2 training/orchestration
+
+- `train_expert_molr.py` requires per-expert full weights for gate/up/down (aliases `w1/w3/w2` accepted); matrix orientation is inferred from covariance `d_model` and validated with down-projection intermediate size.
+- Phase 2 objective keeps true-error targets detached in the error-head term; validation pass/fail is gated only by cosine and error-correlation thresholds.
+- `train_all_experts.py` normalizes execution order by sorting experts `(layer, expert)` before optional `--max-experts` truncation; per-expert seeds are `base_seed + sorted_index`.
+- Orchestration records pre-subprocess skips (`train_skipped_missing_cov`, `train_skipped_missing_weights`) and always emits both merged validation report and failure ledger, even when zero experts complete successfully.
+- Model/schema checks remain strict across Phase 2: `--model` must match `molr_plan.json:model_spec` when present, and covariance schema must match `molr_covariance_npz.v1`.
