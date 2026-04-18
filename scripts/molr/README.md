@@ -34,8 +34,11 @@ Phase 0 goal (from design): produce and archive a reproducible spectral baseline
   - explicit accounting for skipped matrix records.
 - `capture_expert_covariance.py`: scaffold for routed-input covariance contracts:
   - consumes pre-captured routed inputs contract NPZ (`inputs`, `layers`, `experts`),
+  - supports integrated capture mode behind explicit `--capture-routed-traces`,
   - computes per-expert `mu` and Cholesky factors with jitter retries,
+  - can fallback to layer-wide inputs for under-sampled experts via explicit flag,
   - emits `covariance_stats.npz` + `covariance_summary.json`,
+  - optionally emits routed trace artifact NPZ (`molr_routed_traces_npz.v1`),
   - tracks explicit per-expert failure reasons,
   - supports `--allow-empty` for scaffold-only runs when routed-input capture integration is not yet wired.
 
@@ -170,6 +173,20 @@ python scripts/molr/capture_expert_covariance.py \
   --out-json "<run>/covariance_summary.json"
 ```
 
+Optional layer-fallback semantics for low-sample experts:
+
+```bash
+python scripts/molr/capture_expert_covariance.py \
+  --model "unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M" \
+  --tokens 50000 \
+  --routed-inputs-npz "<run>/routed_inputs_contract.npz" \
+  --min-samples-per-expert 16 \
+  --fallback-to-layer-inputs-on-low-samples \
+  --min-layer-samples-for-fallback 32 \
+  --out-npz "<run>/covariance_stats.npz" \
+  --out-json "<run>/covariance_summary.json"
+```
+
 Required routed-input NPZ arrays:
 - `inputs`: float array shaped `[N, d_model]`
 - `layers`: int array shaped `[N]`
@@ -189,6 +206,39 @@ python scripts/molr/capture_expert_covariance.py \
   --out-npz "<run>/covariance_stats.npz" \
   --out-json "<run>/covariance_summary.json"
 ```
+
+Integrated capture mode (explicit trigger):
+
+```bash
+python scripts/molr/capture_expert_covariance.py \
+  --model "unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M" \
+  --tokens 50000 \
+  --capture-routed-traces \
+  --capture-prompts-jsonl "<run>/capture_rows.jsonl" \
+  --capture-seed 42 \
+  --min-samples-per-expert 16 \
+  --fallback-to-layer-inputs-on-low-samples \
+  --out-routed-traces-npz "<run>/routed_traces.npz" \
+  --out-npz "<run>/covariance_stats.npz" \
+  --out-json "<run>/covariance_summary.json"
+```
+
+Capture mode `--capture-prompts-jsonl` row contract (JSON object per line):
+- `inputs`: list[float], shape `[d_model]`
+- `layer`: int
+- `expert`: int
+
+Flag compatibility highlights:
+- `--capture-routed-traces` is mutually exclusive with `--routed-inputs-npz`
+- `--capture-prompts-jsonl` is required when capture mode is enabled
+- `--out-routed-traces-npz` is valid only in capture mode
+
+Summary accounting adds per-expert sample provenance fields:
+- `sample_source` (`routed` or `layer_fallback`)
+- `routed_sample_count`
+- `layer_sample_count`
+- `effective_sample_count`
+- `fallback_applied`
 
 ## Phase 2 usage
 

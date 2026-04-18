@@ -8,6 +8,7 @@ from molr.capture_expert_covariance import main as covariance_main
 from molr.plan_from_svd import main as plan_main
 from molr.types import (
     MOLR_COVARIANCE_NPZ_SCHEMA_VERSION,
+    MOLR_ROUTED_TRACES_NPZ_SCHEMA_VERSION,
     MOLR_COVARIANCE_SUMMARY_SCHEMA_VERSION,
     MOLR_PLAN_SCHEMA_VERSION,
 )
@@ -170,6 +171,7 @@ def test_covariance_scaffold_allow_empty_writes_empty_contract_outputs(tmp_path)
     summary = json.loads(out_json.read_text(encoding="utf-8"))
     assert summary["schema_version"] == MOLR_COVARIANCE_SUMMARY_SCHEMA_VERSION
     assert summary["status"] == "empty"
+    assert summary["input_contract"]["mode"] == "contract_only"
 
     payload = np.load(out_npz, allow_pickle=False)
     assert str(payload["schema_version"]) == MOLR_COVARIANCE_NPZ_SCHEMA_VERSION
@@ -221,6 +223,15 @@ def test_covariance_scaffold_contract_computes_success_and_failure_accounting(tm
     assert summary["failure_accounting"]["experts_succeeded_total"] == 1
     assert summary["failure_accounting"]["experts_failed_total"] == 1
     assert summary["failure_accounting"]["by_reason"]["insufficient_samples(<3)"] == 1
+    assert summary["experts_fallback_used_total"] == 0
+    assert summary["experts_fallback_failed_total"] == 0
+
+    succeeded = summary["experts_succeeded"][0]
+    assert succeeded["sample_source"] == "routed"
+    assert succeeded["routed_sample_count"] == 3
+    assert succeeded["layer_sample_count"] == 5
+    assert succeeded["effective_sample_count"] == 3
+    assert succeeded["fallback_applied"] is False
 
     payload = np.load(out_npz, allow_pickle=False)
     assert str(payload["schema_version"]) == MOLR_COVARIANCE_NPZ_SCHEMA_VERSION
@@ -274,3 +285,239 @@ def test_covariance_scaffold_reports_observed_vs_processed_expert_counts(tmp_pat
     summary = json.loads(out_json.read_text(encoding="utf-8"))
     assert summary["observed"]["experts_observed_total"] == 2
     assert summary["observed"]["experts_processed_total"] == 1
+
+
+def test_covariance_scaffold_uses_layer_fallback_for_under_sampled_expert(tmp_path) -> None:
+    routed_path = tmp_path / "routed_inputs.npz"
+    out_npz = tmp_path / "covariance_stats.npz"
+    out_json = tmp_path / "covariance_summary.json"
+
+    # Expert (0,0): 3 samples -> routed success
+    # Expert (0,1): 2 samples -> fallback to layer (5 samples) when fallback enabled
+    inputs = np.array(
+        [
+            [1.0, 0.0],
+            [0.5, 0.5],
+            [0.0, 1.0],
+            [2.0, 1.0],
+            [2.0, 1.2],
+        ],
+        dtype=np.float32,
+    )
+    layers = np.array([0, 0, 0, 0, 0], dtype=np.int64)
+    experts = np.array([0, 0, 0, 1, 1], dtype=np.int64)
+    np.savez(routed_path, inputs=inputs, layers=layers, experts=experts)
+
+    exit_code = covariance_main(
+        [
+            "--model",
+            "unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M",
+            "--tokens",
+            "5",
+            "--routed-inputs-npz",
+            str(routed_path),
+            "--min-samples-per-expert",
+            "3",
+            "--fallback-to-layer-inputs-on-low-samples",
+            "--min-layer-samples-for-fallback",
+            "4",
+            "--out-npz",
+            str(out_npz),
+            "--out-json",
+            str(out_json),
+        ]
+    )
+    assert exit_code == 0
+
+    summary = json.loads(out_json.read_text(encoding="utf-8"))
+    assert summary["failure_accounting"]["experts_succeeded_total"] == 2
+    assert summary["failure_accounting"]["experts_failed_total"] == 0
+    assert summary["experts_fallback_used_total"] == 1
+    assert summary["experts_fallback_failed_total"] == 0
+
+    fallback_row = next(item for item in summary["experts_succeeded"] if item["expert"] == 1)
+    assert fallback_row["sample_source"] == "layer_fallback"
+    assert fallback_row["routed_sample_count"] == 2
+    assert fallback_row["layer_sample_count"] == 5
+    assert fallback_row["effective_sample_count"] == 5
+    assert fallback_row["fallback_applied"] is True
+
+    payload = np.load(out_npz, allow_pickle=False)
+    assert payload["layers"].shape == (2,)
+    assert payload["experts"].shape == (2,)
+    assert payload["sample_count"].tolist() == [3, 5]
+
+
+def test_covariance_scaffold_fallback_guardrail_failure_reason(tmp_path) -> None:
+    routed_path = tmp_path / "routed_inputs.npz"
+    out_npz = tmp_path / "covariance_stats.npz"
+    out_json = tmp_path / "covariance_summary.json"
+
+    inputs = np.array(
+        [
+            [1.0, 0.0],
+            [0.5, 0.5],
+            [0.0, 1.0],
+            [2.0, 1.0],
+            [2.0, 1.2],
+        ],
+        dtype=np.float32,
+    )
+    layers = np.array([0, 0, 0, 0, 0], dtype=np.int64)
+    experts = np.array([0, 0, 0, 1, 1], dtype=np.int64)
+    np.savez(routed_path, inputs=inputs, layers=layers, experts=experts)
+
+    exit_code = covariance_main(
+        [
+            "--model",
+            "unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M",
+            "--tokens",
+            "5",
+            "--routed-inputs-npz",
+            str(routed_path),
+            "--min-samples-per-expert",
+            "3",
+            "--fallback-to-layer-inputs-on-low-samples",
+            "--min-layer-samples-for-fallback",
+            "6",
+            "--out-npz",
+            str(out_npz),
+            "--out-json",
+            str(out_json),
+        ]
+    )
+    assert exit_code == 0
+
+    summary = json.loads(out_json.read_text(encoding="utf-8"))
+    assert summary["failure_accounting"]["experts_succeeded_total"] == 1
+    assert summary["failure_accounting"]["experts_failed_total"] == 1
+    assert summary["failure_accounting"]["by_reason"]["insufficient_layer_samples_for_fallback(<6)"] == 1
+    assert summary["experts_fallback_used_total"] == 0
+    assert summary["experts_fallback_failed_total"] == 1
+
+
+def test_covariance_scaffold_capture_mode_with_optional_routed_trace_output(tmp_path) -> None:
+    prompts_path = tmp_path / "prompts.jsonl"
+    prompts_path.write_text(
+        "\n".join(
+            [
+                '{"inputs": [1.0, 0.0], "layer": 0, "expert": 0}',
+                '{"inputs": [0.5, 0.5], "layer": 0, "expert": 0}',
+                '{"inputs": [0.0, 1.0], "layer": 0, "expert": 0}',
+                '{"inputs": [2.0, 1.0], "layer": 0, "expert": 1}',
+                '{"inputs": [2.0, 1.2], "layer": 0, "expert": 1}',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    out_npz = tmp_path / "covariance_stats.npz"
+    out_json = tmp_path / "covariance_summary.json"
+    out_traces = tmp_path / "routed_traces.npz"
+
+    exit_code = covariance_main(
+        [
+            "--model",
+            "unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M",
+            "--tokens",
+            "5",
+            "--capture-routed-traces",
+            "--capture-prompts-jsonl",
+            str(prompts_path),
+            "--min-samples-per-expert",
+            "3",
+            "--fallback-to-layer-inputs-on-low-samples",
+            "--out-routed-traces-npz",
+            str(out_traces),
+            "--trace-dtype",
+            "float32",
+            "--out-npz",
+            str(out_npz),
+            "--out-json",
+            str(out_json),
+        ]
+    )
+    assert exit_code == 0
+
+    summary = json.loads(out_json.read_text(encoding="utf-8"))
+    assert summary["capture_runtime"]["status"] == "capture_enabled"
+    assert summary["input_contract"]["mode"] == "capture_enabled"
+    assert summary["outputs"]["routed_traces_npz"] == str(out_traces.resolve())
+    assert summary["outputs"]["routed_traces_npz_schema_version"] == MOLR_ROUTED_TRACES_NPZ_SCHEMA_VERSION
+
+    traces = np.load(out_traces, allow_pickle=False)
+    assert str(traces["schema_version"]) == MOLR_ROUTED_TRACES_NPZ_SCHEMA_VERSION
+    assert traces["inputs"].shape == (5, 2)
+    assert traces["layers"].shape == (5,)
+    assert traces["experts"].shape == (5,)
+
+
+def test_covariance_scaffold_capture_flag_validation_matrix(tmp_path) -> None:
+    prompts_path = tmp_path / "prompts.jsonl"
+    prompts_path.write_text('{"inputs": [1.0, 0.0], "layer": 0, "expert": 0}\n', encoding="utf-8")
+    routed_path = tmp_path / "routed_inputs.npz"
+    np.savez(
+        routed_path,
+        inputs=np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32),
+        layers=np.array([0, 0], dtype=np.int64),
+        experts=np.array([0, 0], dtype=np.int64),
+    )
+
+    out_npz = tmp_path / "covariance_stats.npz"
+    out_json = tmp_path / "covariance_summary.json"
+
+    # capture enabled but missing --capture-prompts-jsonl
+    try:
+        covariance_main(
+            [
+                "--model",
+                "unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M",
+                "--capture-routed-traces",
+                "--out-npz",
+                str(out_npz),
+                "--out-json",
+                str(out_json),
+            ]
+        )
+        assert False, "expected argparse failure"
+    except SystemExit as exc:
+        assert exc.code == 2
+
+    # capture and routed-inputs are mutually exclusive
+    try:
+        covariance_main(
+            [
+                "--model",
+                "unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M",
+                "--capture-routed-traces",
+                "--capture-prompts-jsonl",
+                str(prompts_path),
+                "--routed-inputs-npz",
+                str(routed_path),
+                "--out-npz",
+                str(out_npz),
+                "--out-json",
+                str(out_json),
+            ]
+        )
+        assert False, "expected argparse failure"
+    except SystemExit as exc:
+        assert exc.code == 2
+
+    # --capture-prompts-jsonl without capture flag
+    try:
+        covariance_main(
+            [
+                "--model",
+                "unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M",
+                "--capture-prompts-jsonl",
+                str(prompts_path),
+                "--out-npz",
+                str(out_npz),
+                "--out-json",
+                str(out_json),
+            ]
+        )
+        assert False, "expected argparse failure"
+    except SystemExit as exc:
+        assert exc.code == 2

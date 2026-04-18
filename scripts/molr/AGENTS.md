@@ -8,11 +8,17 @@
 ## Phase 0/1 validation + planning
 
 - Phase 0 accepts only `svd_report.json` schema `1.1` and `run.fidelity_mode == "full_svd"`; model mismatch is reject-by-default unless explicitly overridden.
-- Coverage checks are intentionally heuristic (non-zero + plausibility), and `--strict-coverage` upgrades any non-`pass` (including `warn`) to hard failure.
-- Quantization caveat gating is string-coupled (`"Q4_K_M"` in `assumptions_and_caveats`), so caveat text edits can silently change pass/fail behavior.
-- With `--allow-model-mismatch` during archiving, metadata should still anchor to `svd_report.run.model_spec` to preserve replay provenance.
-- Covariance capture expects routed-input NPZ arrays (`inputs`, `layers`, `experts`); `--allow-empty` is scaffold-only and should not be treated as normal missing-data recovery.
-- Covariance counters intentionally separate intent: `experts_observed_total` (before cap) vs `experts_processed_total` (after `--max-experts`).
+- Coverage checks are heuristic (non-zero + plausibility), and `--strict-coverage` upgrades any non-`pass` (including `warn`) to hard failure.
+- Quantization caveat gating is string-coupled (`"Q4_K_M"` in `assumptions_and_caveats`), so caveat wording edits can silently change pass/fail behavior.
+- With `--allow-model-mismatch` during archiving, metadata should still anchor to `svd_report.run.model_spec` for replay provenance.
+
+## Phase 1 routed-input capture semantics (`capture_expert_covariance.py`)
+
+- Inputs are mode-exclusive: contract mode uses `--routed-inputs-npz`; capture mode requires `--capture-routed-traces --capture-prompts-jsonl`; `--out-routed-traces-npz` is valid only in capture mode.
+- Contract NPZ rows must carry aligned `inputs/layers/experts`; capture JSONL rows are strict `{inputs, layer, expert}` with stable `d_model`.
+- Loader behavior is intentionally split: schema/shape/content validation happens in loaders, but zero-row handling is centralized in `main()` so contract/capture mode treat `N=0` consistently.
+- `--allow-empty` is scaffold-only: it is for missing/empty routed data paths (including capture yielding zero rows), not a normal recovery path for bad inputs.
+- Summary counters intentionally separate discovery vs execution: `experts_observed_total` (pre-cap) vs `experts_processed_total` (post-`--max-experts`).
 
 ## Phase 2 training/orchestration
 
@@ -25,8 +31,8 @@
 ## Phase 3 calibration/packaging
 
 - `calibrate_fallback.py` enforces strict validation-row contracts (`molr_expert_validation.v1`): non-numeric error means, invalid `layer`/`expert`, or non-list `failure_reasons` are hard failures.
-- Threshold sweep is contract-defined as `pred_error_mean > threshold`, with candidate thresholds built from `{0.0} ∪ unique(pred_error_mean)`.
-- Profile selection is asymmetric by design: pick the lowest fallback-rate threshold meeting `quality_proxy_min`; if none meet target, fall back to the max-quality row.
+- Threshold sweep semantics are contract-defined as `pred_error_mean > threshold` (fallback) with candidates from `{0.0} ∪ unique(pred_error_mean)`.
+- Profile selection is intentionally asymmetric: choose the minimum fallback-rate row meeting `quality_proxy_min`; if none satisfy target, choose the max-quality row.
 - Cache-candidate ranking intentionally front-loads non-`pass` experts, then highest predicted/true error, to prioritize full-weight retention where MoLR is least reliable.
 - `package_molr_bundle.py` validates plan/threshold/checkpoint schemas and hard-fails on filename-vs-NPZ `(layer, expert)` mismatches or duplicate expert checkpoints.
 - Bundle coverage is explicit in `molr_bundle_manifest.v1`; missing plan experts are always listed, and `--require-all-plan-experts` upgrades that gap to hard failure.

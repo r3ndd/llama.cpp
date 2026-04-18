@@ -149,3 +149,6 @@ a.out.*
 # Codanna
 .codanna*
 .fastembed_cache
+
+# MoLR
+/molr-*
