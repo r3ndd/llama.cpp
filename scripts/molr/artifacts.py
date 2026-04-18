@@ -12,8 +12,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .types import SVD_REPORT_SCHEMA_VERSION
 
-EXPECTED_SCHEMA_VERSION = "1.1"
+
 DEFAULT_MODEL_SPEC = "unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M"
 
 
@@ -309,9 +310,9 @@ def ensure_expected_svd_report(
     allow_model_mismatch: bool,
 ) -> None:
     schema_version = str(svd_report.get("schema_version") or "")
-    if schema_version != EXPECTED_SCHEMA_VERSION:
+    if schema_version != SVD_REPORT_SCHEMA_VERSION:
         raise MolrPhase0Error(
-            f"Unexpected svd_report schema_version='{schema_version}', expected '{EXPECTED_SCHEMA_VERSION}'.",
+            f"Unexpected svd_report schema_version='{schema_version}', expected '{SVD_REPORT_SCHEMA_VERSION}'.",
         )
 
     run = svd_report.get("run", {})

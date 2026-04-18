@@ -14,6 +14,7 @@
 - Compute `explained_spectral_energy_rank_r` from squared singular values: `sum(s[:r]^2) / sum(s^2)`.
 - Treat zero-total spectral energy as a handled edge case (`0.0` + warning) and reject non-finite results.
 - Use the fixed 19-point rank-fraction grid (`0.05..0.95`) for spectral-energy reporting: per-matrix in `explained_spectral_energy_rank_fractions`, summary in `spectral_energy_rank_fractions` with aligned `explained_spectral_energy_rank_fractions_mean`.
+- `scripts/molr/plan_from_svd.py` consumes that exact 19-point grid from `svd_metrics`; changing grid values/order is a downstream artifact-compatibility change.
 
 ## Performance and parallelization
 
