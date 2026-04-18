@@ -1,10 +1,11 @@
-# MoLR scripts (Phase 0 + Phase 2)
+# MoLR scripts (Phase 0 + Phase 3)
 
 This directory contains operator scaffolding for the MoLR pilot workflow.
 
 - **Phase 0**: spectral baseline capture/archive around `scripts/analyze_moe_svd.py`
 - **Phase 1**: plan generation from SVD report and covariance artifact contracts
 - **Phase 2**: per-expert MoLR training + merged validation/failure reporting
+- **Phase 3**: fallback calibration + bundle packaging manifest
 
 Phase 0 goal (from design): produce and archive a reproducible spectral baseline using existing
 `scripts/analyze_moe_svd.py` for pilot model:
@@ -57,6 +58,21 @@ Phase 0 goal (from design): produce and archive a reproducible spectral baseline
   - merged validation report (`molr_validation_report.json`),
   - failure ledger (`molr_failure_ledger.json`),
   - per-expert checkpoints and validation JSON files.
+
+## What is included in Phase 3
+
+- `calibrate_fallback.py`: sweeps fallback thresholds using per-expert validation summaries and emits
+  `molr_thresholds.json` with:
+  - explicit schema version (`molr_thresholds.v1`),
+  - quality-vs-fallback lookup table,
+  - quality profile threshold selections,
+  - full-expert cache candidate recommendations.
+- `package_molr_bundle.py`: packages plan + thresholds + checkpoints into bundle layout and emits
+  `molr_bundle_manifest.json` with:
+  - explicit schema version (`molr_bundle_manifest.v1`),
+  - SHA-256 checksums for packaged artifacts,
+  - compatibility metadata for plan/threshold/checkpoint schema contracts,
+  - plan-vs-checkpoint coverage accounting.
 
 ## 1) Produce the baseline SVD report
 
@@ -212,3 +228,39 @@ Key outputs under `--out-dir`:
 - `validation/molr_validation_<layer>_<expert>.json`
 - `molr_validation_report.json`
 - `molr_failure_ledger.json`
+
+## Phase 3 usage
+
+### 8) Calibrate fallback thresholds from Phase-2 validation outputs
+
+```bash
+python scripts/molr/calibrate_fallback.py \
+  --checkpoints "<run>/phase2/checkpoints" \
+  --validation-dir "<run>/phase2/validation" \
+  --quality-profiles "balanced:0.90,quality:0.95,strict:0.98" \
+  --top-cache-candidates 32 \
+  --out-json "<run>/molr_thresholds.json"
+```
+
+Output schema version:
+- `molr_thresholds.json`: `molr_thresholds.v1`
+
+### 9) Package runtime-consumable Phase-3 bundle
+
+```bash
+python scripts/molr/package_molr_bundle.py \
+  --model "unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M" \
+  --plan-json "<run>/molr_plan.json" \
+  --checkpoints "<run>/phase2/checkpoints" \
+  --thresholds-json "<run>/molr_thresholds.json" \
+  --out-dir "<run>/bundle"
+```
+
+Bundle outputs:
+- `bundle/molr_plan.json`
+- `bundle/molr_thresholds.json`
+- `bundle/checkpoints/molr_expert_<layer>_<expert>.npz`
+- `bundle/molr_bundle_manifest.json` (`molr_bundle_manifest.v1`)
+
+Use `--require-all-plan-experts` to hard-fail packaging if any expert from `molr_plan.json`
+does not have a packaged checkpoint.
