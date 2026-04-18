@@ -26,4 +26,3 @@
 ## Dev/test ergonomics
 
 - llama.cpp HF cache lookup precedence: `LLAMA_CACHE` -> `HF_HUB_CACHE`/`HUGGINGFACE_HUB_CACHE` -> `HF_HOME/hub` -> `XDG_CACHE_HOME/huggingface/hub` -> `~/.cache/huggingface/hub`.
-- Run `scripts/tests/test_moe_svd_*` with `PYTHONPATH=<repo>/scripts` so `from moe_svd...` imports resolve during pytest collection.
