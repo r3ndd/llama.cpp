@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 
 import numpy as np
 
@@ -401,11 +402,11 @@ def test_covariance_scaffold_capture_mode_with_optional_routed_trace_output(tmp_
     prompts_path.write_text(
         "\n".join(
             [
-                '{"inputs": [1.0, 0.0], "layer": 0, "expert": 0}',
-                '{"inputs": [0.5, 0.5], "layer": 0, "expert": 0}',
-                '{"inputs": [0.0, 1.0], "layer": 0, "expert": 0}',
-                '{"inputs": [2.0, 1.0], "layer": 0, "expert": 1}',
-                '{"inputs": [2.0, 1.2], "layer": 0, "expert": 1}',
+                '{"prompt": "p0", "inference_params": {"n_predict": 1}}',
+                '{"prompt": "p1", "inference_params": {"n_predict": 1}}',
+                '{"prompt": "p2", "inference_params": {"n_predict": 1}}',
+                '{"prompt": "p3", "inference_params": {"n_predict": 1}}',
+                '{"prompt": "p4", "inference_params": {"n_predict": 1}}',
             ]
         ),
         encoding="utf-8",
@@ -414,34 +415,66 @@ def test_covariance_scaffold_capture_mode_with_optional_routed_trace_output(tmp_
     out_npz = tmp_path / "covariance_stats.npz"
     out_json = tmp_path / "covariance_summary.json"
     out_traces = tmp_path / "routed_traces.npz"
+    trace_jsonl = tmp_path / "bridge_trace.jsonl"
 
-    exit_code = covariance_main(
-        [
-            "--model",
-            "unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M",
-            "--tokens",
-            "5",
-            "--capture-routed-traces",
-            "--capture-prompts-jsonl",
-            str(prompts_path),
-            "--min-samples-per-expert",
-            "3",
-            "--fallback-to-layer-inputs-on-low-samples",
-            "--out-routed-traces-npz",
-            str(out_traces),
-            "--trace-dtype",
-            "float32",
-            "--out-npz",
-            str(out_npz),
-            "--out-json",
-            str(out_json),
-        ]
-    )
+    prompt_to_trace = {
+        "p0": {"inputs": [1.0, 0.0], "layer": 0, "expert": 0},
+        "p1": {"inputs": [0.5, 0.5], "layer": 0, "expert": 0},
+        "p2": {"inputs": [0.0, 1.0], "layer": 0, "expert": 0},
+        "p3": {"inputs": [2.0, 1.0], "layer": 0, "expert": 1},
+        "p4": {"inputs": [2.0, 1.2], "layer": 0, "expert": 1},
+    }
+
+    def _fake_run(cmd, env=None, **_kwargs):
+        assert env is not None
+        assert env["LLAMA_MOE_TRACE_ENABLE"] == "1"
+        assert env["LLAMA_MOE_TRACE_FORMAT"] == "jsonl"
+        assert env["LLAMA_MOLR_CAPTURE_SOURCE"]
+        assert "--no-display-prompt" in cmd
+        trace_path = env["LLAMA_MOE_TRACE_JSONL"]
+        prompt = cmd[cmd.index("-p") + 1]
+        with open(trace_path, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(prompt_to_trace[prompt]) + "\n")
+        return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
+
+    import molr.capture_expert_covariance as cov_mod
+
+    original_run = cov_mod.subprocess.run
+    cov_mod.subprocess.run = _fake_run
+    try:
+        exit_code = covariance_main(
+            [
+                "--model",
+                "unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M",
+                "--tokens",
+                "5",
+                "--capture-routed-traces",
+                "--capture-prompts-jsonl",
+                str(prompts_path),
+                "--capture-trace-jsonl",
+                str(trace_jsonl),
+                "--min-samples-per-expert",
+                "3",
+                "--fallback-to-layer-inputs-on-low-samples",
+                "--out-routed-traces-npz",
+                str(out_traces),
+                "--trace-dtype",
+                "float32",
+                "--out-npz",
+                str(out_npz),
+                "--out-json",
+                str(out_json),
+            ]
+        )
+    finally:
+        cov_mod.subprocess.run = original_run
     assert exit_code == 0
 
     summary = json.loads(out_json.read_text(encoding="utf-8"))
     assert summary["capture_runtime"]["status"] == "capture_enabled"
     assert summary["input_contract"]["mode"] == "capture_enabled"
+    assert summary["capture_runtime"]["trace_jsonl_path"] == str(trace_jsonl.resolve())
+    assert summary["capture_runtime"]["prompt_records_total"] == 5
     assert summary["outputs"]["routed_traces_npz"] == str(out_traces.resolve())
     assert summary["outputs"]["routed_traces_npz_schema_version"] == MOLR_ROUTED_TRACES_NPZ_SCHEMA_VERSION
 
@@ -454,7 +487,7 @@ def test_covariance_scaffold_capture_mode_with_optional_routed_trace_output(tmp_
 
 def test_covariance_scaffold_capture_flag_validation_matrix(tmp_path) -> None:
     prompts_path = tmp_path / "prompts.jsonl"
-    prompts_path.write_text('{"inputs": [1.0, 0.0], "layer": 0, "expert": 0}\n', encoding="utf-8")
+    prompts_path.write_text('{"prompt": "p0", "inference_params": {"n_predict": 1}}\n', encoding="utf-8")
     routed_path = tmp_path / "routed_inputs.npz"
     np.savez(
         routed_path,
@@ -521,3 +554,94 @@ def test_covariance_scaffold_capture_flag_validation_matrix(tmp_path) -> None:
         assert False, "expected argparse failure"
     except SystemExit as exc:
         assert exc.code == 2
+
+
+def test_covariance_scaffold_capture_accepts_json_records_format(tmp_path) -> None:
+    prompts_path = tmp_path / "prompts.json"
+    prompts_path.write_text(
+        json.dumps(
+            {
+                "schema": "capture_prompt_inference.v1",
+                "records": [
+                    {"prompt": "p0", "inference_params": {"n_predict": 1}},
+                    {"prompt": "p1", "inference_params": {"n_predict": 1}},
+                    {"prompt": "p2", "inference_params": {"n_predict": 1}},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    out_npz = tmp_path / "covariance_stats.npz"
+    out_json = tmp_path / "covariance_summary.json"
+    trace_jsonl = tmp_path / "bridge_trace.jsonl"
+
+    prompt_to_trace = {
+        "p0": {"inputs": [1.0, 0.0], "layer": 0, "expert": 0},
+        "p1": {"inputs": [0.5, 0.5], "layer": 0, "expert": 0},
+        "p2": {"inputs": [0.0, 1.0], "layer": 0, "expert": 0},
+    }
+
+    def _fake_run(cmd, env=None, **_kwargs):
+        prompt = cmd[cmd.index("-p") + 1]
+        with open(env["LLAMA_MOE_TRACE_JSONL"], "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(prompt_to_trace[prompt]) + "\n")
+        return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
+
+    import molr.capture_expert_covariance as cov_mod
+
+    original_run = cov_mod.subprocess.run
+    cov_mod.subprocess.run = _fake_run
+    try:
+        exit_code = covariance_main(
+            [
+                "--model",
+                "unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M",
+                "--tokens",
+                "3",
+                "--capture-routed-traces",
+                "--capture-prompts-jsonl",
+                str(prompts_path),
+                "--capture-trace-jsonl",
+                str(trace_jsonl),
+                "--min-samples-per-expert",
+                "3",
+                "--out-npz",
+                str(out_npz),
+                "--out-json",
+                str(out_json),
+            ]
+        )
+    finally:
+        cov_mod.subprocess.run = original_run
+
+    assert exit_code == 0
+    summary = json.loads(out_json.read_text(encoding="utf-8"))
+    assert summary["capture_runtime"]["prompt_inference_source_schema"] == "capture_prompt_inference.v1"
+
+
+def test_covariance_scaffold_capture_rejects_invalid_prompt_record_schema(tmp_path) -> None:
+    prompts_path = tmp_path / "bad_prompts.jsonl"
+    prompts_path.write_text('{"inference_params": {"n_predict": 1}}\n', encoding="utf-8")
+
+    out_npz = tmp_path / "covariance_stats.npz"
+    out_json = tmp_path / "covariance_summary.json"
+
+    exit_code = covariance_main(
+        [
+            "--model",
+            "unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M",
+            "--tokens",
+            "1",
+            "--capture-routed-traces",
+            "--capture-prompts-jsonl",
+            str(prompts_path),
+            "--capture-trace-jsonl",
+            str(tmp_path / "trace.jsonl"),
+            "--out-npz",
+            str(out_npz),
+            "--out-json",
+            str(out_json),
+        ]
+    )
+    assert exit_code == 2

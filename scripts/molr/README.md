@@ -214,7 +214,8 @@ python scripts/molr/capture_expert_covariance.py \
   --model "unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M" \
   --tokens 50000 \
   --capture-routed-traces \
-  --capture-prompts-jsonl "<run>/capture_rows.jsonl" \
+  --capture-prompts-jsonl "<run>/capture_prompt_inference.jsonl" \
+  --capture-trace-jsonl "<run>/moe_routed_trace.jsonl" \
   --capture-seed 42 \
   --min-samples-per-expert 16 \
   --fallback-to-layer-inputs-on-low-samples \
@@ -223,14 +224,28 @@ python scripts/molr/capture_expert_covariance.py \
   --out-json "<run>/covariance_summary.json"
 ```
 
-Capture mode `--capture-prompts-jsonl` row contract (JSON object per line):
-- `inputs`: list[float], shape `[d_model]`
-- `layer`: int
-- `expert`: int
+Capture mode `--capture-prompts-jsonl` input contract:
+
+- **JSONL format**: one JSON record per line.
+- **JSON format**: top-level JSON object with `records` array (or a top-level array).
+
+Each record schema:
+- `prompt`: string (**required**)
+- `inference_params`: object (optional)
+
+`inference_params` supports these bridge keys directly:
+- `n_predict`, `seed`, `temperature`, `top_p`, `top_k`, `min_p`, `repeat_penalty`, `repeat_last_n`,
+  `n_ctx`, `n_batch`, `n_ubatch`, `no_display_prompt`, `extra_cli_args`
+
+Runtime capture bridge behavior:
+- For each record, the script runs `llama-cli` (or `--capture-llama-cli`) with MoE routed tracing enabled.
+- The script requires a routed-trace sink path via `--capture-trace-jsonl` or `LLAMA_MOE_TRACE_JSONL`.
+- The bridge expects trace JSONL rows with `layer`, `expert`, and `inputs` (optionally nested under `data`).
 
 Flag compatibility highlights:
 - `--capture-routed-traces` is mutually exclusive with `--routed-inputs-npz`
 - `--capture-prompts-jsonl` is required when capture mode is enabled
+- `--capture-trace-jsonl` (or env `LLAMA_MOE_TRACE_JSONL`) is required in capture mode
 - `--out-routed-traces-npz` is valid only in capture mode
 
 Summary accounting adds per-expert sample provenance fields:

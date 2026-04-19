@@ -3,7 +3,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import subprocess
 import sys
+import tempfile
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -47,6 +50,18 @@ class SampleSelection:
     routed_sample_count: int
     layer_sample_count: int
     fallback_applied: bool
+
+
+@dataclass(frozen=True)
+class PromptInferenceRecord:
+    prompt: str
+    inference_params: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class PromptInferenceSpec:
+    records: list[PromptInferenceRecord]
+    source_schema: str
 
 
 def _now_utc_iso() -> str:
@@ -105,8 +120,33 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--capture-prompts-jsonl",
         default="",
         help=(
-            "JSONL source for integrated routed-trace capture mode. "
-            "Each non-empty line must be a JSON object containing 'inputs', 'layer', and 'expert'."
+            "JSON/JSONL prompt+inference source for integrated routed-trace capture mode. "
+            "Accepts either a JSON object with a top-level 'records' array or JSONL with one record per line. "
+            "Each record requires 'prompt' (string) and optional 'inference_params' (object)."
+        ),
+    )
+    parser.add_argument(
+        "--capture-trace-jsonl",
+        default="",
+        help=(
+            "Optional override path for routed trace JSONL. If unset, capture mode will use the value in "
+            "LLAMA_MOE_TRACE_JSONL from the environment."
+        ),
+    )
+    parser.add_argument(
+        "--capture-llama-cli",
+        default="",
+        help=(
+            "Optional llama CLI binary path for integrated inference capture bridge. "
+            "Defaults to env LLAMA_MOLR_CLI_BIN when set, otherwise 'llama-cli'."
+        ),
+    )
+    parser.add_argument(
+        "--capture-common-inference-params",
+        default="",
+        help=(
+            "Optional JSON object string merged into each record's inference_params "
+            "(record-level keys take precedence)."
         ),
     )
     parser.add_argument(
@@ -210,8 +250,24 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         parser.error("--capture-prompts-jsonl is required when --capture-routed-traces is enabled.")
     if (not args.capture_routed_traces) and args.capture_prompts_jsonl:
         parser.error("--capture-prompts-jsonl requires --capture-routed-traces.")
+    if (not args.capture_routed_traces) and args.capture_trace_jsonl:
+        parser.error("--capture-trace-jsonl requires --capture-routed-traces.")
+    if (not args.capture_routed_traces) and args.capture_llama_cli:
+        parser.error("--capture-llama-cli requires --capture-routed-traces.")
+    if (not args.capture_routed_traces) and args.capture_common_inference_params:
+        parser.error("--capture-common-inference-params requires --capture-routed-traces.")
     if (not args.capture_routed_traces) and args.out_routed_traces_npz:
         parser.error("--out-routed-traces-npz requires --capture-routed-traces.")
+    if args.capture_common_inference_params:
+        try:
+            common_payload = json.loads(args.capture_common_inference_params)
+        except Exception as exc:
+            parser.error(f"--capture-common-inference-params must be valid JSON object: {exc}")
+        if not isinstance(common_payload, dict):
+            parser.error("--capture-common-inference-params must decode to a JSON object.")
+    else:
+        common_payload = {}
+    args.capture_common_inference_params_obj = dict(common_payload)
     return args
 
 
@@ -234,6 +290,321 @@ def _collect_input_vector(raw: Any, *, field: str, line_no: int) -> np.ndarray:
     if not np.isfinite(arr).all():
         raise MolrCovarianceError(f"Line {line_no}: '{field}' contains non-finite values")
     return arr
+
+
+def _parse_prompt_record(raw: Any, *, line_no: int) -> PromptInferenceRecord:
+    if not isinstance(raw, dict):
+        raise MolrCovarianceError(f"Line {line_no}: capture prompt record must be a JSON object")
+
+    prompt = raw.get("prompt")
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise MolrCovarianceError(f"Line {line_no}: 'prompt' must be a non-empty string")
+
+    inference_params = raw.get("inference_params", {})
+    if inference_params is None:
+        inference_params = {}
+    if not isinstance(inference_params, dict):
+        raise MolrCovarianceError(f"Line {line_no}: 'inference_params' must be a JSON object when provided")
+
+    return PromptInferenceRecord(prompt=prompt, inference_params=dict(inference_params))
+
+
+def _load_capture_prompt_inference_spec(args: argparse.Namespace) -> PromptInferenceSpec:
+    prompts_path = Path(args.capture_prompts_jsonl).expanduser().resolve()
+    if not prompts_path.is_file():
+        raise MolrCovarianceError(f"--capture-prompts-jsonl path is not a file: '{prompts_path}'")
+
+    raw_text = prompts_path.read_text(encoding="utf-8")
+    stripped = raw_text.strip()
+    if not stripped:
+        raise MolrCovarianceError("capture prompt/inference file is empty")
+
+    records: list[PromptInferenceRecord] = []
+    source_schema = ""
+
+    try:
+        payload = json.loads(stripped)
+        if isinstance(payload, dict):
+            if "records" in payload:
+                source_schema = str(payload.get("schema", "capture_prompt_inference.v1"))
+                raw_records = payload.get("records")
+                if not isinstance(raw_records, list) or len(raw_records) == 0:
+                    raise MolrCovarianceError("JSON capture file requires non-empty top-level 'records' array")
+                for idx, raw_record in enumerate(raw_records, start=1):
+                    records.append(_parse_prompt_record(raw_record, line_no=idx))
+            elif "prompt" in payload:
+                source_schema = "capture_prompt_inference.v1"
+                records.append(_parse_prompt_record(payload, line_no=1))
+            else:
+                raise MolrCovarianceError(
+                    "JSON capture file object must contain either 'records' or 'prompt'",
+                )
+        elif isinstance(payload, list):
+            source_schema = "capture_prompt_inference.v1"
+            if len(payload) == 0:
+                raise MolrCovarianceError("JSON capture file array is empty")
+            for idx, raw_record in enumerate(payload, start=1):
+                records.append(_parse_prompt_record(raw_record, line_no=idx))
+        else:
+            raise MolrCovarianceError("capture prompt/inference JSON must be object or array")
+    except MolrCovarianceError:
+        raise
+    except Exception:
+        # Fallback to JSONL parsing.
+        source_schema = "capture_prompt_inference_jsonl.v1"
+        lines = raw_text.splitlines()
+        for idx, line in enumerate(lines, start=1):
+            token = line.strip()
+            if not token:
+                continue
+            try:
+                raw_record = json.loads(token)
+            except Exception as exc:
+                raise MolrCovarianceError(f"Line {idx}: invalid JSON in capture prompt/inference JSONL") from exc
+            records.append(_parse_prompt_record(raw_record, line_no=idx))
+
+    if args.capture_max_sequences > 0:
+        records = records[: int(args.capture_max_sequences)]
+    if len(records) == 0:
+        raise MolrCovarianceError("capture prompt/inference file has no usable records")
+
+    common_params = dict(getattr(args, "capture_common_inference_params_obj", {}))
+    if common_params:
+        merged_records: list[PromptInferenceRecord] = []
+        for record in records:
+            merged = dict(common_params)
+            merged.update(record.inference_params)
+            merged_records.append(PromptInferenceRecord(prompt=record.prompt, inference_params=merged))
+        records = merged_records
+
+    return PromptInferenceSpec(records=records, source_schema=source_schema)
+
+
+def _as_number(value: Any, *, field: str, line_no: int) -> float:
+    try:
+        out = float(value)
+    except Exception as exc:
+        raise MolrCovarianceError(f"Line {line_no}: invalid numeric '{field}'") from exc
+    if not np.isfinite(out):
+        raise MolrCovarianceError(f"Line {line_no}: non-finite numeric '{field}'")
+    return out
+
+
+def _extract_trace_fields(raw: Any, *, line_no: int) -> tuple[np.ndarray, int, int] | None:
+    if not isinstance(raw, dict):
+        return None
+
+    event = raw.get("event")
+    if isinstance(event, str) and event not in ("moe_routed_input", "routed_input", "moe.trace.routed_input"):
+        # Ignore unrelated events when a multi-event trace file is used.
+        return None
+
+    node: Any = raw
+    if isinstance(raw.get("data"), dict):
+        node = raw["data"]
+
+    if not isinstance(node, dict):
+        return None
+
+    layer_raw = node.get("layer", node.get("layer_id"))
+    expert_raw = node.get("expert", node.get("expert_id"))
+    inputs_raw = node.get("inputs", node.get("input", node.get("vector")))
+
+    if layer_raw is None or expert_raw is None or inputs_raw is None:
+        return None
+
+    layer = _as_int(layer_raw, field="layer", line_no=line_no)
+    expert = _as_int(expert_raw, field="expert", line_no=line_no)
+    vec = _collect_input_vector(inputs_raw, field="inputs", line_no=line_no)
+    return vec, layer, expert
+
+
+def _load_routed_trace_jsonl(
+    *,
+    trace_path: Path,
+    args: argparse.Namespace,
+) -> tuple[TraceCaptureResult, dict[str, int]]:
+    if not trace_path.is_file():
+        raise MolrCovarianceError(
+            f"MoE routed trace JSONL not found at '{trace_path}'. "
+            "Ensure llama.cpp was started with routed-input trace emission enabled.",
+        )
+
+    per_expert_count: defaultdict[tuple[int, int], int] = defaultdict(int)
+    per_layer_count: defaultdict[int, int] = defaultdict(int)
+    dropped_by_cap: Counter[str] = Counter()
+    inputs_rows: list[np.ndarray] = []
+    layers_rows: list[int] = []
+    experts_rows: list[int] = []
+    d_model: int | None = None
+
+    lines = trace_path.read_text(encoding="utf-8").splitlines()
+    for idx, line in enumerate(lines, start=1):
+        token = line.strip()
+        if not token:
+            continue
+        try:
+            payload = json.loads(token)
+        except Exception as exc:
+            raise MolrCovarianceError(f"Trace line {idx}: invalid JSON") from exc
+
+        parsed = _extract_trace_fields(payload, line_no=idx)
+        if parsed is None:
+            continue
+
+        vec, layer, expert = parsed
+        if d_model is None:
+            d_model = int(vec.shape[0])
+        elif int(vec.shape[0]) != d_model:
+            raise MolrCovarianceError(
+                f"Trace line {idx}: d_model mismatch; expected {d_model}, got {int(vec.shape[0])}",
+            )
+
+        if len(inputs_rows) >= int(args.max_trace_samples_total):
+            dropped_by_cap["max_trace_samples_total"] += 1
+            continue
+        if args.max_trace_samples_per_expert > 0 and per_expert_count[(layer, expert)] >= int(args.max_trace_samples_per_expert):
+            dropped_by_cap["max_trace_samples_per_expert"] += 1
+            continue
+        if args.max_trace_samples_per_layer > 0 and per_layer_count[layer] >= int(args.max_trace_samples_per_layer):
+            dropped_by_cap["max_trace_samples_per_layer"] += 1
+            continue
+
+        inputs_rows.append(vec)
+        layers_rows.append(layer)
+        experts_rows.append(expert)
+        per_expert_count[(layer, expert)] += 1
+        per_layer_count[layer] += 1
+
+    if not inputs_rows:
+        raise MolrCovarianceError("capture_mode_no_rows")
+
+    in_dtype = np.float16 if args.trace_dtype == "float16" else np.float32
+    inputs_arr = np.asarray(inputs_rows, dtype=in_dtype).astype(np.float64, copy=False)
+    layers_arr = np.asarray(layers_rows, dtype=np.int64)
+    experts_arr = np.asarray(experts_rows, dtype=np.int64)
+
+    result = TraceCaptureResult(
+        model_spec=str(args.model),
+        d_model=int(inputs_arr.shape[1]),
+        routed_inputs=inputs_arr,
+        routed_layers=layers_arr,
+        routed_experts=experts_arr,
+    )
+    return result, dict(sorted((k, int(v)) for k, v in dropped_by_cap.items()))
+
+
+def _build_llama_cli_command(
+    *,
+    args: argparse.Namespace,
+    record: PromptInferenceRecord,
+    record_index: int,
+) -> list[str]:
+    cli_bin = args.capture_llama_cli or os.environ.get("LLAMA_MOLR_CLI_BIN") or "llama-cli"
+
+    merged_params = dict(record.inference_params)
+    if "seed" not in merged_params and int(args.capture_seed) != 0:
+        merged_params["seed"] = int(args.capture_seed) + int(record_index)
+    if "n_predict" not in merged_params:
+        merged_params["n_predict"] = int(args.tokens) if int(args.tokens) > 0 else 0
+
+    cmd = [str(cli_bin), "-m", str(args.model), "-p", record.prompt]
+    cmd.extend(["-n", str(int(merged_params.get("n_predict", 0)))])
+
+    supported_float = {
+        "temperature": "--temp",
+        "top_p": "--top-p",
+        "min_p": "--min-p",
+        "repeat_penalty": "--repeat-penalty",
+    }
+    supported_int = {
+        "seed": "--seed",
+        "top_k": "--top-k",
+        "repeat_last_n": "--repeat-last-n",
+        "n_ctx": "-c",
+        "n_batch": "-b",
+        "n_ubatch": "-ub",
+    }
+    supported_bool_flag = {
+        "no_display_prompt": "--no-display-prompt",
+    }
+
+    for key, flag in supported_float.items():
+        if key in merged_params:
+            cmd.extend([flag, str(_as_number(merged_params[key], field=key, line_no=record_index + 1))])
+    for key, flag in supported_int.items():
+        if key in merged_params:
+            cmd.extend([flag, str(_as_int(merged_params[key], field=key, line_no=record_index + 1))])
+    for key, flag in supported_bool_flag.items():
+        if bool(merged_params.get(key, False)):
+            cmd.append(flag)
+
+    # Allow explicit passthrough for advanced flags not yet modeled above.
+    extra_cli_args = merged_params.get("extra_cli_args", [])
+    if extra_cli_args:
+        if not isinstance(extra_cli_args, list) or not all(isinstance(it, str) for it in extra_cli_args):
+            raise MolrCovarianceError(
+                f"Record {record_index + 1}: 'extra_cli_args' must be a list of strings",
+            )
+        cmd.extend(extra_cli_args)
+
+    # Keep runs quiet and deterministic for capture pipeline.
+    if "--no-display-prompt" not in cmd:
+        cmd.append("--no-display-prompt")
+    return cmd
+
+
+def _run_inference_capture_bridge(
+    *,
+    args: argparse.Namespace,
+    prompt_spec: PromptInferenceSpec,
+    trace_jsonl_path: Path,
+) -> None:
+    if trace_jsonl_path.exists():
+        trace_jsonl_path.unlink()
+    trace_jsonl_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Optional prompt manifest used only for reproducibility/debug context.
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".jsonl", delete=False) as tmp_file:
+        temp_prompt_manifest = Path(tmp_file.name)
+        for record in prompt_spec.records:
+            tmp_file.write(
+                json.dumps(
+                    {
+                        "prompt": record.prompt,
+                        "inference_params": record.inference_params,
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
+            )
+
+    try:
+        for idx, record in enumerate(prompt_spec.records):
+            cmd = _build_llama_cli_command(args=args, record=record, record_index=idx)
+            env = os.environ.copy()
+            env["LLAMA_MOE_TRACE_ENABLE"] = "1"
+            env["LLAMA_MOE_TRACE_JSONL"] = str(trace_jsonl_path)
+            env["LLAMA_MOE_TRACE_FORMAT"] = "jsonl"
+            env["LLAMA_MOLR_CAPTURE_SOURCE"] = str(temp_prompt_manifest)
+
+            proc = subprocess.run(
+                cmd,
+                env=env,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            if proc.returncode != 0:
+                stderr_tail = (proc.stderr or "").strip()
+                raise MolrCovarianceError(
+                    f"capture inference failed for record {idx + 1} (exit={proc.returncode}): {stderr_tail}",
+                )
+    finally:
+        try:
+            temp_prompt_manifest.unlink(missing_ok=True)
+        except Exception:
+            pass
 
 
 def _load_routed_contract(path: Path, *, expected_model: str | None) -> TraceCaptureResult:
@@ -284,77 +655,23 @@ def _load_routed_contract(path: Path, *, expected_model: str | None) -> TraceCap
     )
 
 
-def _capture_routed_traces(args: argparse.Namespace) -> tuple[TraceCaptureResult, dict[str, int]]:
-    prompts_path = Path(args.capture_prompts_jsonl).expanduser().resolve()
-    if not prompts_path.is_file():
-        raise MolrCovarianceError(f"--capture-prompts-jsonl path is not a file: '{prompts_path}'")
+def _capture_routed_traces(args: argparse.Namespace) -> tuple[TraceCaptureResult, dict[str, int], PromptInferenceSpec, str]:
+    prompt_spec = _load_capture_prompt_inference_spec(args)
 
-    per_expert_count: defaultdict[tuple[int, int], int] = defaultdict(int)
-    per_layer_count: defaultdict[int, int] = defaultdict(int)
+    trace_jsonl_str = args.capture_trace_jsonl or os.environ.get("LLAMA_MOE_TRACE_JSONL", "")
+    if not trace_jsonl_str:
+        raise MolrCovarianceError(
+            "Capture mode requires routed trace sink path via --capture-trace-jsonl or LLAMA_MOE_TRACE_JSONL.",
+        )
+    trace_jsonl_path = Path(trace_jsonl_str).expanduser().resolve()
 
-    dropped_by_cap: Counter[str] = Counter()
-    inputs_rows: list[np.ndarray] = []
-    layers_rows: list[int] = []
-    experts_rows: list[int] = []
-    d_model: int | None = None
-
-    sequence_rows = prompts_path.read_text(encoding="utf-8").splitlines()
-    for seq_index, line in enumerate(sequence_rows):
-        if args.capture_max_sequences > 0 and seq_index >= int(args.capture_max_sequences):
-            break
-
-        token = line.strip()
-        if not token:
-            continue
-        try:
-            payload = json.loads(token)
-        except Exception as exc:
-            raise MolrCovarianceError(f"Line {seq_index + 1}: invalid JSON in capture-prompts JSONL") from exc
-        if not isinstance(payload, dict):
-            raise MolrCovarianceError(f"Line {seq_index + 1}: JSON record must be an object")
-
-        layer = _as_int(payload.get("layer"), field="layer", line_no=seq_index + 1)
-        expert = _as_int(payload.get("expert"), field="expert", line_no=seq_index + 1)
-        vec = _collect_input_vector(payload.get("inputs"), field="inputs", line_no=seq_index + 1)
-        if d_model is None:
-            d_model = int(vec.shape[0])
-        elif int(vec.shape[0]) != d_model:
-            raise MolrCovarianceError(
-                f"Line {seq_index + 1}: d_model mismatch; expected {d_model}, got {int(vec.shape[0])}",
-            )
-
-        if len(inputs_rows) >= int(args.max_trace_samples_total):
-            dropped_by_cap["max_trace_samples_total"] += 1
-            continue
-        if args.max_trace_samples_per_expert > 0 and per_expert_count[(layer, expert)] >= int(args.max_trace_samples_per_expert):
-            dropped_by_cap["max_trace_samples_per_expert"] += 1
-            continue
-        if args.max_trace_samples_per_layer > 0 and per_layer_count[layer] >= int(args.max_trace_samples_per_layer):
-            dropped_by_cap["max_trace_samples_per_layer"] += 1
-            continue
-
-        inputs_rows.append(vec)
-        layers_rows.append(layer)
-        experts_rows.append(expert)
-        per_expert_count[(layer, expert)] += 1
-        per_layer_count[layer] += 1
-
-    if not inputs_rows:
-        raise MolrCovarianceError("capture_mode_no_rows")
-
-    in_dtype = np.float16 if args.trace_dtype == "float16" else np.float32
-    inputs_arr = np.asarray(inputs_rows, dtype=in_dtype).astype(np.float64, copy=False)
-    layers_arr = np.asarray(layers_rows, dtype=np.int64)
-    experts_arr = np.asarray(experts_rows, dtype=np.int64)
-
-    result = TraceCaptureResult(
-        model_spec=str(args.model),
-        d_model=int(inputs_arr.shape[1]),
-        routed_inputs=inputs_arr,
-        routed_layers=layers_arr,
-        routed_experts=experts_arr,
+    _run_inference_capture_bridge(
+        args=args,
+        prompt_spec=prompt_spec,
+        trace_jsonl_path=trace_jsonl_path,
     )
-    return result, dict(sorted((k, int(v)) for k, v in dropped_by_cap.items()))
+    trace_result, dropped = _load_routed_trace_jsonl(trace_path=trace_jsonl_path, args=args)
+    return trace_result, dropped, prompt_spec, str(trace_jsonl_path)
 
 
 def _cholesky_with_jitter(cov: np.ndarray) -> tuple[np.ndarray, float]:
@@ -544,10 +861,12 @@ def main(argv: list[str]) -> int:
         capture_mode = bool(args.capture_routed_traces)
         capture_runtime_status = "capture_enabled" if capture_mode else "contract_only"
         capture_dropped_counters: dict[str, int] = {}
+        capture_prompt_spec: PromptInferenceSpec | None = None
+        capture_trace_jsonl_used: str | None = None
 
         if capture_mode:
             try:
-                trace_result, capture_dropped_counters = _capture_routed_traces(args)
+                trace_result, capture_dropped_counters, capture_prompt_spec, capture_trace_jsonl_used = _capture_routed_traces(args)
             except MolrCovarianceError as exc:
                 if str(exc) == "capture_mode_no_rows" and args.allow_empty:
                     _build_empty_artifacts(
@@ -734,8 +1053,14 @@ def main(argv: list[str]) -> int:
         }
         if capture_mode:
             input_contract["capture_prompts_jsonl"] = str(Path(args.capture_prompts_jsonl).expanduser().resolve())
-            input_contract["capture_row_schema"] = {
-                "required_fields": ["inputs", "layer", "expert"],
+            input_contract["capture_prompt_inference_schema"] = {
+                "formats": ["json_object_records", "jsonl_records"],
+                "required_fields": ["prompt"],
+                "optional_fields": ["inference_params"],
+            }
+            input_contract["capture_trace_schema"] = {
+                "required_fields": ["layer", "expert", "inputs"],
+                "accepted_event_names": ["moe_routed_input", "routed_input", "moe.trace.routed_input"],
             }
         else:
             input_contract["routed_inputs_npz"] = str(Path(args.routed_inputs_npz).expanduser().resolve())
@@ -756,6 +1081,17 @@ def main(argv: list[str]) -> int:
                 "max_trace_samples_per_expert": int(args.max_trace_samples_per_expert),
                 "max_trace_samples_per_layer": int(args.max_trace_samples_per_layer),
                 "dropped_samples": capture_dropped_counters,
+                "trace_jsonl_path": capture_trace_jsonl_used,
+                "prompt_records_total": (
+                    int(len(capture_prompt_spec.records))
+                    if (capture_mode and capture_prompt_spec is not None)
+                    else None
+                ),
+                "prompt_inference_source_schema": (
+                    capture_prompt_spec.source_schema
+                    if (capture_mode and capture_prompt_spec is not None)
+                    else None
+                ),
             },
             "config": {
                 "min_samples_per_expert": int(args.min_samples_per_expert),

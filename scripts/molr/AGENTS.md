@@ -2,45 +2,30 @@
 
 ## Cross-phase contracts
 
-- Keep artifact schema/version constants in `scripts/molr/types.py`; Phase 0-4 tools are intentionally wired through those shared constants.
-- Planning is coupled to `scripts/moe_svd/svd_metrics.py:SPECTRAL_ENERGY_RANK_FRACTIONS` (fixed 19-point grid). Grid/order changes are artifact compatibility changes, not local tuning.
+- Keep artifact/schema version constants centralized in `scripts/molr/types.py`; phases intentionally share these constants rather than redefining them.
+- Planning is contract-coupled to `scripts/moe_svd/svd_metrics.py:SPECTRAL_ENERGY_RANK_FRACTIONS` (fixed 19-point grid). Grid/order edits are compatibility changes.
 
-## Phase 0/1 validation + planning
+## Phase 0 validation/planning
 
-- Phase 0 accepts only `svd_report.json` schema `1.1` and `run.fidelity_mode == "full_svd"`; model mismatch is reject-by-default unless explicitly overridden.
-- Coverage checks are heuristic (non-zero + plausibility), and `--strict-coverage` upgrades any non-`pass` (including `warn`) to hard failure.
-- Quantization caveat gating is string-coupled (`"Q4_K_M"` in `assumptions_and_caveats`), so caveat wording edits can silently change pass/fail behavior.
-- With `--allow-model-mismatch` during archiving, metadata should still anchor to `svd_report.run.model_spec` for replay provenance.
+- Phase 0 accepts only `svd_report.json` schema `1.1` with `run.fidelity_mode == "full_svd"`; mismatched model is reject-by-default unless explicitly overridden.
+- Coverage status is heuristic; `--strict-coverage` upgrades any non-`pass` status (including `warn`) to hard failure.
+- Quantization caveat handling is string-coupled (`"Q4_K_M"` searched in `assumptions_and_caveats`), so caveat wording changes can alter gating.
 
-## Phase 1 routed-input capture semantics (`capture_expert_covariance.py`)
+## Phase 1 prompt-driven capture bridge (`capture_expert_covariance.py`)
 
-- Inputs are mode-exclusive: contract mode uses `--routed-inputs-npz`; capture mode requires `--capture-routed-traces --capture-prompts-jsonl`; `--out-routed-traces-npz` is valid only in capture mode.
-- Contract NPZ rows must carry aligned `inputs/layers/experts`; capture JSONL rows are strict `{inputs, layer, expert}` with stable `d_model`.
-- Loader behavior is intentionally split: schema/shape/content validation happens in loaders, but zero-row handling is centralized in `main()` so contract/capture mode treat `N=0` consistently.
-- `--allow-empty` is scaffold-only: it is for missing/empty routed data paths (including capture yielding zero rows), not a normal recovery path for bad inputs.
-- Summary counters intentionally separate discovery vs execution: `experts_observed_total` (pre-cap) vs `experts_processed_total` (post-`--max-experts`).
+- Input modes are exclusive: contract mode (`--routed-inputs-npz`) vs capture mode (`--capture-routed-traces --capture-prompts-jsonl`). `--out-routed-traces-npz` is capture-only.
+- Prompt source accepts JSON object (`records`), single-record JSON object, JSON array, or JSONL; each record requires `prompt`, optional `inference_params`.
+- Capture bridge runs one `llama-cli` call per prompt, sets `LLAMA_MOE_TRACE_ENABLE=1` and `LLAMA_MOE_TRACE_FORMAT=jsonl`, and forces `--no-display-prompt` for machine-readable traces.
+- Trace sink path is mandatory in capture mode (`--capture-trace-jsonl` or `LLAMA_MOE_TRACE_JSONL`) and is reset before execution to avoid stale-row contamination.
+- Record-level inference params override `--capture-common-inference-params`; default seed becomes `capture_seed + record_index` only when record seed is absent.
+- Routed trace loader accepts routed-input events and requires `layer/expert/inputs`; vector width (`d_model`) is locked by first valid row and later rows must match.
+- `--allow-empty` is scaffold-only for missing/empty routed rows (including zero-row capture), not a bypass for malformed inputs.
+- Summary intentionally distinguishes observed vs processed experts (`experts_observed_total` before `--max-experts` cap, `experts_processed_total` after).
 
-## Phase 2 training/orchestration
+## Phase 2+ runtime pipeline contracts
 
-- `train_expert_molr.py` requires full expert weights for gate/up/down (`w1/w3/w2` aliases accepted); matrix orientation is inferred from covariance `d_model` and then validated against down-projection intermediate size.
-- Error-head training uses detached true-error targets; validation pass/fail is driven by cosine + error-correlation thresholds (not full objective value).
-- `train_all_experts.py` deterministically sorts experts `(layer, expert)` before optional truncation, and derives per-expert seeds as `base_seed + sorted_index`.
-- Orchestration records pre-subprocess skips (`train_skipped_missing_cov`, `train_skipped_missing_weights`) and still emits merged validation + failure-ledger artifacts even when zero experts train successfully.
-- Phase 2 keeps strict compatibility gates: `--model` must match `molr_plan.json:model_spec` (when present) and covariance schema must be `molr_covariance_npz.v1`.
-
-## Phase 3 calibration/packaging
-
-- `calibrate_fallback.py` enforces strict validation-row contracts (`molr_expert_validation.v1`): non-numeric error means, invalid `layer`/`expert`, or non-list `failure_reasons` are hard failures.
-- Threshold sweep semantics are contract-defined as `pred_error_mean > threshold` (fallback) with candidates from `{0.0} ∪ unique(pred_error_mean)`.
-- Profile selection is intentionally asymmetric: choose the minimum fallback-rate row meeting `quality_proxy_min`; if none satisfy target, choose the max-quality row.
-- Cache-candidate ranking intentionally front-loads non-`pass` experts, then highest predicted/true error, to prioritize full-weight retention where MoLR is least reliable.
-- `package_molr_bundle.py` validates plan/threshold/checkpoint schemas and hard-fails on filename-vs-NPZ `(layer, expert)` mismatches or duplicate expert checkpoints.
-- Bundle coverage is explicit in `molr_bundle_manifest.v1`; missing plan experts are always listed, and `--require-all-plan-experts` upgrades that gap to hard failure.
-
-## Phase 4 guarded runtime scaffold
-
-- `package_molr_bundle.py` stamps runtime compatibility schema versions in the manifest and can emit `runtime_config.template.json` with `enabled=false` as rollback-safe default.
-- `runtime_bundle.py` enforces strict manifest compatibility (plan/threshold/checkpoint/runtime schemas) and requires exactly one threshold selector: `fallback_threshold` xor `quality_profile`.
-- Manifest checkpoint paths can be absolute or bundle-relative; runtime loading normalizes relative paths against `bundle_dir` before NPZ schema/model checks.
-- `runtime_shadow.py` is validation-only and emits recommendations only; explicit-enable enforcement is opt-in (`--require-explicit-enable`), not default.
-- `runtime_telemetry.py` is strict on event typing (`used_fallback` must be boolean) and computes `avg_fallback_latency_ms` over fallback calls only.
+- `train_all_experts.py` sorts `(layer, expert)` deterministically before truncation and derives per-expert seed as `base_seed + sorted_index`.
+- `calibrate_fallback.py` threshold semantics are contract-defined: fallback when `pred_error_mean > threshold`, candidates from `{0.0} ∪ unique(pred_error_mean)`.
+- `runtime_bundle.py` requires exactly one threshold selector (`fallback_threshold` xor `quality_profile`) and normalizes bundle-relative checkpoint paths before schema/model checks.
+- `runtime_shadow.py` recommendation mode is non-enforcing by default; explicit-enable checks are opt-in via `--require-explicit-enable`.
+- `runtime_telemetry.py` treats `used_fallback` as strict boolean input and computes `avg_fallback_latency_ms` over fallback calls only.
