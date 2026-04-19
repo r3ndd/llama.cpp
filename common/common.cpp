@@ -1471,6 +1471,17 @@ struct llama_context_params common_context_params_to_llama(const common_params &
     cparams.flash_attn_type   = params.flash_attn_type;
     cparams.cb_eval           = params.cb_eval;
     cparams.cb_eval_user_data = params.cb_eval_user_data;
+    cparams.moe_trace_enable              = params.moe_trace_enable;
+    cparams.moe_trace_path                = params.moe_trace_path.c_str();
+    cparams.moe_trace_format              = params.moe_trace_format.c_str();
+    cparams.moe_trace_precision           = params.moe_trace_precision.c_str();
+    cparams.moe_trace_sample_rate         = params.moe_trace_sample_rate;
+    cparams.moe_trace_max_rows_total      = params.moe_trace_max_rows_total;
+    cparams.moe_trace_max_rows_per_layer  = params.moe_trace_max_rows_per_layer;
+    cparams.moe_trace_max_rows_per_expert = params.moe_trace_max_rows_per_expert;
+    cparams.moe_trace_buffer_rows         = params.moe_trace_buffer_rows;
+    cparams.moe_trace_flush_interval_ms   = params.moe_trace_flush_interval_ms;
+    cparams.moe_trace_strict              = params.moe_trace_strict;
     cparams.offload_kqv       = !params.no_kv_offload;
     cparams.no_perf           = params.no_perf;
     cparams.op_offload        = !params.no_op_offload;

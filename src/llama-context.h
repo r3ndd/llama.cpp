@@ -14,6 +14,7 @@
 
 struct llama_model;
 class llama_batch_allocr;
+class llama_moe_trace;
 
 class llama_io_read_i;
 class llama_io_write_i;
@@ -243,6 +244,10 @@ private:
 
     llm_graph_cb graph_get_cb() const;
 
+    static bool graph_eval_cb(ggml_tensor * t, bool ask, void * user_data);
+    bool graph_eval_trace_wants(const ggml_tensor * t) const;
+    bool graph_eval_trace(ggml_tensor * t);
+
     // TODO: read/write lora adapters and cvec
     size_t state_write_data(llama_io_write_i & io);
     size_t state_read_data (llama_io_read_i  & io);
@@ -260,6 +265,17 @@ private:
 
     llama_adapter_cvec_ptr  cvec;
     llama_adapter_loras_ptr loras;
+
+    std::unique_ptr<llama_moe_trace> moe_trace;
+    std::string moe_trace_path;
+    std::string moe_trace_format;
+    std::string moe_trace_precision;
+
+    struct graph_eval_cb_data_t {
+        llama_context * ctx = nullptr;
+        ggml_backend_sched_eval_callback user_cb = nullptr;
+        void * user_cb_data = nullptr;
+    } graph_eval_cb_data;
 
     llama_cross cross; // TODO: tmp for handling cross-attention - need something better probably
 

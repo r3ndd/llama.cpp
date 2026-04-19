@@ -450,6 +450,18 @@ struct common_params {
     ggml_backend_sched_eval_callback cb_eval = nullptr;
     void * cb_eval_user_data                 = nullptr;
 
+    bool        moe_trace_enable              = false;
+    std::string moe_trace_path                = "";
+    std::string moe_trace_format              = "jsonl";
+    std::string moe_trace_precision           = "f16";
+    float       moe_trace_sample_rate         = 1.0f;
+    int32_t     moe_trace_max_rows_total      = 200000;
+    int32_t     moe_trace_max_rows_per_layer  = 0;
+    int32_t     moe_trace_max_rows_per_expert = 0;
+    int32_t     moe_trace_buffer_rows         = 2048;
+    int32_t     moe_trace_flush_interval_ms   = 1000;
+    bool        moe_trace_strict              = false;
+
     ggml_numa_strategy numa = GGML_NUMA_STRATEGY_DISABLED;
 
     enum llama_rope_scaling_type rope_scaling_type = LLAMA_ROPE_SCALING_TYPE_UNSPECIFIED;

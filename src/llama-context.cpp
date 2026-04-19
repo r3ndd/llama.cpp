@@ -6,6 +6,7 @@
 #include "llama-io.h"
 #include "llama-memory.h"
 #include "llama-mmap.h"
+#include "llama-moe-trace.h"
 #include "llama-model.h"
 #include "llama-ext.h"
 
@@ -14,6 +15,9 @@
 #include <cstring>
 #include <limits>
 #include <stdexcept>
+
+#define LLAMA_MOE_TRACE_TOPK_PREFIX "ffn_moe_topk-"
+#define LLAMA_MOE_TRACE_EXPERT_IN_PREFIX "ffn_moe_expert_in-"
 
 //
 // llama_context
@@ -62,6 +66,48 @@ llama_context::llama_context(
 
     cparams.cb_eval           = params.cb_eval;
     cparams.cb_eval_user_data = params.cb_eval_user_data;
+
+    cparams.moe_trace_enable              = params.moe_trace_enable;
+    cparams.moe_trace_path                = params.moe_trace_path;
+    cparams.moe_trace_format              = params.moe_trace_format;
+    cparams.moe_trace_precision           = params.moe_trace_precision;
+    cparams.moe_trace_sample_rate         = params.moe_trace_sample_rate;
+    cparams.moe_trace_max_rows_total      = params.moe_trace_max_rows_total;
+    cparams.moe_trace_max_rows_per_layer  = params.moe_trace_max_rows_per_layer;
+    cparams.moe_trace_max_rows_per_expert = params.moe_trace_max_rows_per_expert;
+    cparams.moe_trace_buffer_rows         = params.moe_trace_buffer_rows;
+    cparams.moe_trace_flush_interval_ms   = params.moe_trace_flush_interval_ms;
+    cparams.moe_trace_strict              = params.moe_trace_strict;
+
+    moe_trace_path      = cparams.moe_trace_path      ? cparams.moe_trace_path      : "";
+    moe_trace_format    = cparams.moe_trace_format    ? cparams.moe_trace_format    : "jsonl";
+    moe_trace_precision = cparams.moe_trace_precision ? cparams.moe_trace_precision : "f16";
+
+    cparams.moe_trace_path      = moe_trace_path.c_str();
+    cparams.moe_trace_format    = moe_trace_format.c_str();
+    cparams.moe_trace_precision = moe_trace_precision.c_str();
+
+    graph_eval_cb_data.ctx          = this;
+    graph_eval_cb_data.user_cb      = cparams.cb_eval;
+    graph_eval_cb_data.user_cb_data = cparams.cb_eval_user_data;
+
+    cparams.cb_eval           = graph_eval_cb;
+    cparams.cb_eval_user_data = &graph_eval_cb_data;
+
+    llama_moe_trace_config trace_cfg;
+    trace_cfg.enabled             = cparams.moe_trace_enable;
+    trace_cfg.path                = moe_trace_path;
+    trace_cfg.format              = moe_trace_format;
+    trace_cfg.precision           = moe_trace_precision;
+    trace_cfg.sample_rate         = cparams.moe_trace_sample_rate;
+    trace_cfg.max_rows_total      = cparams.moe_trace_max_rows_total;
+    trace_cfg.max_rows_per_layer  = cparams.moe_trace_max_rows_per_layer;
+    trace_cfg.max_rows_per_expert = cparams.moe_trace_max_rows_per_expert;
+    trace_cfg.buffer_rows         = cparams.moe_trace_buffer_rows;
+    trace_cfg.flush_interval_ms   = cparams.moe_trace_flush_interval_ms;
+    trace_cfg.strict              = cparams.moe_trace_strict;
+
+    moe_trace = llama_moe_trace::init(trace_cfg, model.hparams, model.name, uint64_t(model.t_start_us));
 
     // Initialize backend samplers here so they are part of the sampling graph
     // before the reserve passes run later in this function. This avoids a later
@@ -365,6 +411,10 @@ llama_context::llama_context(
 }
 
 llama_context::~llama_context() {
+    if (moe_trace) {
+        moe_trace->flush();
+    }
+
     if (!model.hparams.no_alloc) {
         for (size_t i = 0; i < backend_ptrs.size(); ++i) {
             ggml_backend_t             backend = backend_ptrs[i];
@@ -633,6 +683,10 @@ void llama_context::synchronize() {
     }
 
     ggml_backend_sched_synchronize(sched.get());
+
+    if (moe_trace) {
+        moe_trace->flush();
+    }
 
     // FIXME: if multiple single tokens are evaluated without a synchronization,
     // the stats will be added to the prompt evaluation stats
@@ -1222,6 +1276,10 @@ llm_graph_result * llama_context::process_ubatch(const llama_ubatch & ubatch, ll
         res->set_inputs(&ubatch);
 
         //LLAMA_LOG_INFO("graph set inputs time: %.3f ms\n", (ggml_time_us() - t_start_us)/1000.0);
+    }
+
+    if (moe_trace) {
+        moe_trace->set_ubatch(ubatch);
     }
 
     const auto status = graph_compute(res->get_gf(), ubatch.n_tokens > 1);
@@ -2202,6 +2260,12 @@ llm_graph_cb llama_context::graph_get_cb() const {
             ggml_set_name(cur, name);
         }
 
+        if (moe_trace) {
+            if (moe_trace->wants_tensor(name)) {
+                moe_trace->set_ubatch(ubatch);
+            }
+        }
+
         // norm may be automatically assigned to the backend of the previous layer, increasing data transfer between backends
         // FIXME: fix in ggml_backend_sched
         const bool full_offload = model.n_gpu_layers() > model.hparams.n_layer;
@@ -2218,6 +2282,50 @@ llm_graph_cb llama_context::graph_get_cb() const {
             }
         }
     };
+}
+
+bool llama_context::graph_eval_cb(ggml_tensor * t, bool ask, void * user_data) {
+    auto * cb_data = static_cast<llama_context::graph_eval_cb_data_t *>(user_data);
+    if (cb_data == nullptr || cb_data->ctx == nullptr) {
+        return true;
+    }
+
+    llama_context * ctx = cb_data->ctx;
+    if (ask) {
+        bool wants = false;
+        if (ctx->graph_eval_trace_wants(t)) {
+            wants = true;
+        }
+        if (cb_data->user_cb) {
+            wants = cb_data->user_cb(t, ask, cb_data->user_cb_data) || wants;
+        }
+        return wants;
+    }
+
+    bool ok = true;
+    if (!ctx->graph_eval_trace(t)) {
+        ok = false;
+    }
+    if (cb_data->user_cb) {
+        ok = cb_data->user_cb(t, ask, cb_data->user_cb_data) && ok;
+    }
+    return ok;
+}
+
+bool llama_context::graph_eval_trace_wants(const ggml_tensor * t) const {
+    if (!moe_trace || t == nullptr) {
+        return false;
+    }
+
+    return strncmp(t->name, LLAMA_MOE_TRACE_TOPK_PREFIX, strlen(LLAMA_MOE_TRACE_TOPK_PREFIX)) == 0 ||
+           strncmp(t->name, LLAMA_MOE_TRACE_EXPERT_IN_PREFIX, strlen(LLAMA_MOE_TRACE_EXPERT_IN_PREFIX)) == 0;
+}
+
+bool llama_context::graph_eval_trace(ggml_tensor * t) {
+    if (!moe_trace) {
+        return true;
+    }
+    return moe_trace->capture_eval(t);
 }
 
 //
@@ -2902,6 +3010,17 @@ llama_context_params llama_context_default_params() {
         /*.defrag_thold                =*/ -1.0f,
         /*.cb_eval                     =*/ nullptr,
         /*.cb_eval_user_data           =*/ nullptr,
+        /*.moe_trace_enable            =*/ false,
+        /*.moe_trace_path              =*/ nullptr,
+        /*.moe_trace_format            =*/ nullptr,
+        /*.moe_trace_precision         =*/ nullptr,
+        /*.moe_trace_sample_rate       =*/ 1.0f,
+        /*.moe_trace_max_rows_total    =*/ 200000,
+        /*.moe_trace_max_rows_per_layer=*/ 0,
+        /*.moe_trace_max_rows_per_expert=*/ 0,
+        /*.moe_trace_buffer_rows       =*/ 2048,
+        /*.moe_trace_flush_interval_ms =*/ 1000,
+        /*.moe_trace_strict            =*/ false,
         /*.type_k                      =*/ GGML_TYPE_F16,
         /*.type_v                      =*/ GGML_TYPE_F16,
         /*.abort_callback              =*/ nullptr,

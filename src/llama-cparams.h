@@ -44,4 +44,16 @@ struct llama_cparams {
 
     ggml_backend_sched_eval_callback cb_eval;
     void * cb_eval_user_data;
+
+    bool        moe_trace_enable;
+    const char * moe_trace_path;
+    const char * moe_trace_format;
+    const char * moe_trace_precision;
+    float       moe_trace_sample_rate;
+    int32_t     moe_trace_max_rows_total;
+    int32_t     moe_trace_max_rows_per_layer;
+    int32_t     moe_trace_max_rows_per_expert;
+    int32_t     moe_trace_buffer_rows;
+    int32_t     moe_trace_flush_interval_ms;
+    bool        moe_trace_strict;
 };

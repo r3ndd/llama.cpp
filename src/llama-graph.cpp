@@ -1427,6 +1427,8 @@ ggml_tensor * llm_graph_context::build_moe_ffn(
         cb(cur, "ffn_moe_weighted", il);
     }
 
+    cb(cur, "ffn_moe_expert_in", il);
+
     ggml_tensor * up = nullptr;
     ggml_tensor * experts = nullptr;
 

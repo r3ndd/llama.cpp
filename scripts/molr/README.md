@@ -242,6 +242,22 @@ Runtime capture bridge behavior:
 - The script requires a routed-trace sink path via `--capture-trace-jsonl` or `LLAMA_MOE_TRACE_JSONL`.
 - The bridge expects trace JSONL rows with `layer`, `expert`, and `inputs` (optionally nested under `data`).
 
+Runtime MoE trace controls (default off, additive):
+- `--moe-trace` / `--no-moe-trace`
+- `--moe-trace-path PATH` (env: `LLAMA_MOE_TRACE_JSONL`)
+- `--moe-trace-format jsonl` (env: `LLAMA_MOE_TRACE_FORMAT`)
+- `--moe-trace-precision {f16,f32}`
+- `--moe-trace-sample-rate FLOAT`
+- `--moe-trace-max-rows-total N`
+- `--moe-trace-max-rows-per-layer N`
+- `--moe-trace-max-rows-per-expert N`
+- `--moe-trace-buffer-rows N`
+- `--moe-trace-flush-interval-ms N`
+- `--moe-trace-strict`
+
+Privacy/safety note:
+- Routed MoE input vectors may leak prompt semantics; keep trace files on restricted local storage.
+
 Flag compatibility highlights:
 - `--capture-routed-traces` is mutually exclusive with `--routed-inputs-npz`
 - `--capture-prompts-jsonl` is required when capture mode is enabled

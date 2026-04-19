@@ -6,6 +6,7 @@
 #include <vector>
 #include <sstream>
 #include <unordered_set>
+#include <cmath>
 
 #undef NDEBUG
 #include <cassert>
@@ -117,6 +118,33 @@ int main(void) {
     assert(true == common_params_parse(argv.size(), list_str_to_char(argv).data(), params, LLAMA_EXAMPLE_COMMON));
     assert(params.verbosity > 1);
 
+    argv = {
+        "binary_name",
+        "--moe-trace",
+        "--moe-trace-path", "trace.jsonl",
+        "--moe-trace-format", "jsonl",
+        "--moe-trace-precision", "f32",
+        "--moe-trace-sample-rate", "0.25",
+        "--moe-trace-max-rows-total", "100",
+        "--moe-trace-max-rows-per-layer", "10",
+        "--moe-trace-max-rows-per-expert", "3",
+        "--moe-trace-buffer-rows", "16",
+        "--moe-trace-flush-interval-ms", "250",
+        "--moe-trace-strict",
+    };
+    assert(true == common_params_parse(argv.size(), list_str_to_char(argv).data(), params, LLAMA_EXAMPLE_COMMON));
+    assert(params.moe_trace_enable == true);
+    assert(params.moe_trace_path == "trace.jsonl");
+    assert(params.moe_trace_format == "jsonl");
+    assert(params.moe_trace_precision == "f32");
+    assert(std::fabs(params.moe_trace_sample_rate - 0.25f) < 1e-6f);
+    assert(params.moe_trace_max_rows_total == 100);
+    assert(params.moe_trace_max_rows_per_layer == 10);
+    assert(params.moe_trace_max_rows_per_expert == 3);
+    assert(params.moe_trace_buffer_rows == 16);
+    assert(params.moe_trace_flush_interval_ms == 250);
+    assert(params.moe_trace_strict == true);
+
     argv = {"binary_name", "-m", "abc.gguf", "--predict", "6789", "--batch-size", "9090"};
     assert(true == common_params_parse(argv.size(), list_str_to_char(argv).data(), params, LLAMA_EXAMPLE_COMMON));
     assert(params.model.path == "abc.gguf");
@@ -153,6 +181,15 @@ int main(void) {
     assert(true == common_params_parse(argv.size(), list_str_to_char(argv).data(), params, LLAMA_EXAMPLE_COMMON));
     assert(params.model.path == "blah.gguf");
     assert(params.cpuparams.n_threads == 1010);
+
+    setenv("LLAMA_MOE_TRACE_ENABLE", "1", true);
+    setenv("LLAMA_MOE_TRACE_JSONL", "trace-env.jsonl", true);
+    setenv("LLAMA_MOE_TRACE_FORMAT", "jsonl", true);
+    argv = {"binary_name"};
+    assert(true == common_params_parse(argv.size(), list_str_to_char(argv).data(), params, LLAMA_EXAMPLE_COMMON));
+    assert(params.moe_trace_enable == true);
+    assert(params.moe_trace_path == "trace-env.jsonl");
+    assert(params.moe_trace_format == "jsonl");
 
     printf("test-arg-parser: test negated environment variables\n\n");
 

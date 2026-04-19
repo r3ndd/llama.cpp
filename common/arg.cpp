@@ -907,6 +907,47 @@ bool common_params_parse(int argc, char ** argv, common_params & params, llama_e
         exit(1); // for other exceptions, we exit with status code 1
     }
 
+    if (params.moe_trace_enable) {
+        if (!params.moe_trace_format.empty() && params.moe_trace_format != "jsonl") {
+            fprintf(stderr, "warning: unsupported --moe-trace-format '%s'; only 'jsonl' is currently supported\n", params.moe_trace_format.c_str());
+            if (params.moe_trace_strict) {
+                return false;
+            }
+        }
+
+        if (!params.moe_trace_precision.empty() && params.moe_trace_precision != "f16" && params.moe_trace_precision != "f32") {
+            fprintf(stderr, "warning: unsupported --moe-trace-precision '%s'; expected f16 or f32\n", params.moe_trace_precision.c_str());
+            if (params.moe_trace_strict) {
+                return false;
+            }
+        }
+
+        if (params.moe_trace_sample_rate < 0.0f || params.moe_trace_sample_rate > 1.0f) {
+            fprintf(stderr, "warning: --moe-trace-sample-rate must be in [0,1], got %.6f\n", (double) params.moe_trace_sample_rate);
+            if (params.moe_trace_strict) {
+                return false;
+            }
+        }
+
+        if (params.moe_trace_max_rows_total < 0 ||
+            params.moe_trace_max_rows_per_layer < 0 ||
+            params.moe_trace_max_rows_per_expert < 0 ||
+            params.moe_trace_buffer_rows < 0 ||
+            params.moe_trace_flush_interval_ms < 0) {
+            fprintf(stderr, "warning: MoE trace row caps and buffering values must be >= 0\n");
+            if (params.moe_trace_strict) {
+                return false;
+            }
+        }
+
+        if (params.moe_trace_path.empty()) {
+            fprintf(stderr, "warning: MoE trace enabled but output path is empty; set --moe-trace-path or LLAMA_MOE_TRACE_JSONL\n");
+            if (params.moe_trace_strict) {
+                return false;
+            }
+        }
+    }
+
     return true;
 }
 
@@ -2292,6 +2333,100 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
             params.tensor_buft_overrides.push_back(llm_ffn_exps_cpu_override());
         }
     ).set_env("LLAMA_ARG_CPU_MOE"));
+    add_opt(common_arg(
+        {"--moe-trace"},
+        string_format("whether to capture routed MoE expert inputs to trace output (default: %s)", params.moe_trace_enable ? "enabled" : "disabled"),
+        [](common_params & params) {
+            params.moe_trace_enable = true;
+        }
+    ).set_env("LLAMA_MOE_TRACE_ENABLE"));
+    add_opt(common_arg(
+        {"--no-moe-trace"},
+        string_format("disable routed MoE expert-input tracing (default: %s)", params.moe_trace_enable ? "disabled" : "enabled"),
+        [](common_params & params) {
+            params.moe_trace_enable = false;
+        }
+    ));
+    add_opt(common_arg(
+        {"--moe-trace-path"}, "PATH",
+        string_format("path for MoE routed-input trace output (default: '%s')", params.moe_trace_path.c_str()),
+        [](common_params & params, const std::string & value) {
+            params.moe_trace_path = value;
+            params.moe_trace_enable = true;
+        }
+    ).set_env("LLAMA_MOE_TRACE_JSONL"));
+    add_opt(common_arg(
+        {"--moe-trace-format"}, "FORMAT",
+        string_format("MoE trace format, currently only 'jsonl' is supported (default: %s)", params.moe_trace_format.c_str()),
+        [](common_params & params, const std::string & value) {
+            params.moe_trace_format = value;
+            params.moe_trace_enable = true;
+        }
+    ).set_env("LLAMA_MOE_TRACE_FORMAT"));
+    add_opt(common_arg(
+        {"--moe-trace-precision"}, "{f16,f32}",
+        string_format("MoE trace vector precision (default: %s)", params.moe_trace_precision.c_str()),
+        [](common_params & params, const std::string & value) {
+            params.moe_trace_precision = value;
+            params.moe_trace_enable = true;
+        }
+    ));
+    add_opt(common_arg(
+        {"--moe-trace-sample-rate"}, "F",
+        string_format("MoE trace routed-row sampling rate in [0,1] (default: %.3f)", (double) params.moe_trace_sample_rate),
+        [](common_params & params, const std::string & value) {
+            params.moe_trace_sample_rate = std::stof(value);
+            params.moe_trace_enable = true;
+        }
+    ));
+    add_opt(common_arg(
+        {"--moe-trace-max-rows-total"}, "N",
+        string_format("maximum MoE trace rows globally, 0 disables cap (default: %d)", params.moe_trace_max_rows_total),
+        [](common_params & params, int value) {
+            params.moe_trace_max_rows_total = value;
+            params.moe_trace_enable = true;
+        }
+    ));
+    add_opt(common_arg(
+        {"--moe-trace-max-rows-per-layer"}, "N",
+        string_format("maximum MoE trace rows per layer, 0 disables cap (default: %d)", params.moe_trace_max_rows_per_layer),
+        [](common_params & params, int value) {
+            params.moe_trace_max_rows_per_layer = value;
+            params.moe_trace_enable = true;
+        }
+    ));
+    add_opt(common_arg(
+        {"--moe-trace-max-rows-per-expert"}, "N",
+        string_format("maximum MoE trace rows per (layer,expert), 0 disables cap (default: %d)", params.moe_trace_max_rows_per_expert),
+        [](common_params & params, int value) {
+            params.moe_trace_max_rows_per_expert = value;
+            params.moe_trace_enable = true;
+        }
+    ));
+    add_opt(common_arg(
+        {"--moe-trace-buffer-rows"}, "N",
+        string_format("MoE trace buffered rows before flush (default: %d)", params.moe_trace_buffer_rows),
+        [](common_params & params, int value) {
+            params.moe_trace_buffer_rows = value;
+            params.moe_trace_enable = true;
+        }
+    ));
+    add_opt(common_arg(
+        {"--moe-trace-flush-interval-ms"}, "N",
+        string_format("MoE trace periodic flush interval in ms (default: %d)", params.moe_trace_flush_interval_ms),
+        [](common_params & params, int value) {
+            params.moe_trace_flush_interval_ms = value;
+            params.moe_trace_enable = true;
+        }
+    ));
+    add_opt(common_arg(
+        {"--moe-trace-strict"},
+        string_format("fail initialization when MoE trace setup fails (default: %s)", params.moe_trace_strict ? "enabled" : "disabled"),
+        [](common_params & params) {
+            params.moe_trace_strict = true;
+            params.moe_trace_enable = true;
+        }
+    ));
     add_opt(common_arg(
         {"-ncmoe", "--n-cpu-moe"}, "N",
         "keep the Mixture of Experts (MoE) weights of the first N layers in the CPU",
