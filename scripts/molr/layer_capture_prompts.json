@@ -1,0 +1,209 @@
+{
+  "schema": "capture_prompt_inference.v1",
+  "records": [
+    {
+      "prompt": "Write a Python function that groups a list of transactions by account ID and returns monthly debit totals.",
+      "inference_params": {
+        "n_predict": 192,
+        "temperature": 0.2,
+        "top_p": 0.9,
+        "top_k": 40,
+        "min_p": 0.05,
+        "repeat_penalty": 1.1,
+        "repeat_last_n": 128,
+        "seed": 101,
+        "n_ctx": 4096,
+        "n_batch": 512,
+        "n_ubatch": 128,
+        "no_display_prompt": true
+      }
+    },
+    {
+      "prompt": "Explain in plain language how CRISPR-Cas9 edits DNA and list two current clinical use cases.",
+      "inference_params": {
+        "n_predict": 220,
+        "temperature": 0.3,
+        "top_p": 0.92,
+        "top_k": 50,
+        "min_p": 0.05,
+        "repeat_penalty": 1.08,
+        "repeat_last_n": 128,
+        "seed": 102,
+        "n_ctx": 4096,
+        "n_batch": 512,
+        "n_ubatch": 128,
+        "no_display_prompt": true
+      }
+    },
+    {
+      "prompt": "Draft a short scene where an astronaut receives a delayed message from home during a solar storm.",
+      "inference_params": {
+        "n_predict": 260,
+        "temperature": 0.75,
+        "top_p": 0.95,
+        "top_k": 60,
+        "min_p": 0.05,
+        "repeat_penalty": 1.05,
+        "repeat_last_n": 128,
+        "seed": 103,
+        "n_ctx": 4096,
+        "n_batch": 512,
+        "n_ubatch": 128,
+        "no_display_prompt": true
+      }
+    },
+    {
+      "prompt": "Solve the equation 3x^2 - 10x - 8 = 0 and verify each root by substitution.",
+      "inference_params": {
+        "n_predict": 180,
+        "temperature": 0.15,
+        "top_p": 0.9,
+        "top_k": 30,
+        "min_p": 0.05,
+        "repeat_penalty": 1.12,
+        "repeat_last_n": 128,
+        "seed": 104,
+        "n_ctx": 4096,
+        "n_batch": 512,
+        "n_ubatch": 128,
+        "no_display_prompt": true
+      }
+    },
+    {
+      "prompt": "Given this weekly sales table (Store A: 120, 130, 115, 140; Store B: 100, 105, 98, 110), compare trend and volatility.",
+      "inference_params": {
+        "n_predict": 210,
+        "temperature": 0.25,
+        "top_p": 0.9,
+        "top_k": 40,
+        "min_p": 0.05,
+        "repeat_penalty": 1.1,
+        "repeat_last_n": 128,
+        "seed": 105,
+        "n_ctx": 4096,
+        "n_batch": 512,
+        "n_ubatch": 128,
+        "no_display_prompt": true
+      }
+    },
+    {
+      "prompt": "Summarize the main causes and turning points of World War I in six bullet points.",
+      "inference_params": {
+        "n_predict": 220,
+        "temperature": 0.35,
+        "top_p": 0.93,
+        "top_k": 45,
+        "min_p": 0.05,
+        "repeat_penalty": 1.08,
+        "repeat_last_n": 128,
+        "seed": 106,
+        "n_ctx": 4096,
+        "n_batch": 512,
+        "n_ubatch": 128,
+        "no_display_prompt": true
+      }
+    },
+    {
+      "prompt": "Provide patient-friendly advice for managing seasonal allergies, including when to seek medical care.",
+      "inference_params": {
+        "n_predict": 220,
+        "temperature": 0.3,
+        "top_p": 0.92,
+        "top_k": 45,
+        "min_p": 0.05,
+        "repeat_penalty": 1.08,
+        "repeat_last_n": 128,
+        "seed": 107,
+        "n_ctx": 4096,
+        "n_batch": 512,
+        "n_ubatch": 128,
+        "no_display_prompt": true
+      }
+    },
+    {
+      "prompt": "Compare a carbon tax and cap-and-trade as climate policy tools, including one benefit and one drawback of each.",
+      "inference_params": {
+        "n_predict": 230,
+        "temperature": 0.28,
+        "top_p": 0.92,
+        "top_k": 45,
+        "min_p": 0.05,
+        "repeat_penalty": 1.08,
+        "repeat_last_n": 128,
+        "seed": 108,
+        "n_ctx": 4096,
+        "n_batch": 512,
+        "n_ubatch": 128,
+        "no_display_prompt": true
+      }
+    },
+    {
+      "prompt": "Explain what informed consent means in healthcare and list three elements required for valid consent.",
+      "inference_params": {
+        "n_predict": 200,
+        "temperature": 0.22,
+        "top_p": 0.9,
+        "top_k": 40,
+        "min_p": 0.05,
+        "repeat_penalty": 1.1,
+        "repeat_last_n": 128,
+        "seed": 109,
+        "n_ctx": 4096,
+        "n_batch": 512,
+        "n_ubatch": 128,
+        "no_display_prompt": true
+      }
+    },
+    {
+      "prompt": "Reason through this logic puzzle: If all glims are blargs and some blargs are snips, what can and cannot be concluded about glims and snips?",
+      "inference_params": {
+        "n_predict": 200,
+        "temperature": 0.2,
+        "top_p": 0.9,
+        "top_k": 35,
+        "min_p": 0.05,
+        "repeat_penalty": 1.12,
+        "repeat_last_n": 128,
+        "seed": 110,
+        "n_ctx": 4096,
+        "n_batch": 512,
+        "n_ubatch": 128,
+        "no_display_prompt": true
+      }
+    },
+    {
+      "prompt": "Write SQL to find the top 5 customers by total spending in the past 90 days from orders(order_id, customer_id, amount, order_date).",
+      "inference_params": {
+        "n_predict": 190,
+        "temperature": 0.18,
+        "top_p": 0.88,
+        "top_k": 35,
+        "min_p": 0.05,
+        "repeat_penalty": 1.12,
+        "repeat_last_n": 128,
+        "seed": 111,
+        "n_ctx": 4096,
+        "n_batch": 512,
+        "n_ubatch": 128,
+        "no_display_prompt": true
+      }
+    },
+    {
+      "prompt": "Create a one-week beginner fitness plan balancing cardio, strength, and recovery for a healthy adult.",
+      "inference_params": {
+        "n_predict": 230,
+        "temperature": 0.4,
+        "top_p": 0.93,
+        "top_k": 50,
+        "min_p": 0.05,
+        "repeat_penalty": 1.08,
+        "repeat_last_n": 128,
+        "seed": 112,
+        "n_ctx": 4096,
+        "n_batch": 512,
+        "n_ubatch": 128,
+        "no_display_prompt": true
+      }
+    }
+  ]
+}

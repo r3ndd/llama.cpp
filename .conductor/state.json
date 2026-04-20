@@ -1,0 +1,10 @@
+{
+  "mode": "conductor",
+  "stage": "idle",
+  "pending": [],
+  "last": {
+    "plan": "2026-04-17-1823-analyzing-the-svd-compressibility-of-expert-weig-plan.md",
+    "design": "2026-04-19-1852-layer-wise-input-tracking-design.md",
+    "research": "2026-04-17-2256-parallelizing-analyze-moe-svd-py-research.md"
+  }
+}
