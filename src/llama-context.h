@@ -267,6 +267,7 @@ private:
     llama_adapter_loras_ptr loras;
 
     std::unique_ptr<llama_moe_trace> moe_trace;
+    std::string moe_trace_granularity;
     std::string moe_trace_path;
     std::string moe_trace_format;
     std::string moe_trace_precision;

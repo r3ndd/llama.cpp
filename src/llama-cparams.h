@@ -46,6 +46,7 @@ struct llama_cparams {
     void * cb_eval_user_data;
 
     bool        moe_trace_enable;
+    const char * moe_trace_granularity;
     const char * moe_trace_path;
     const char * moe_trace_format;
     const char * moe_trace_precision;

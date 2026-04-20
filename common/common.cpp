@@ -1472,6 +1472,7 @@ struct llama_context_params common_context_params_to_llama(const common_params &
     cparams.cb_eval           = params.cb_eval;
     cparams.cb_eval_user_data = params.cb_eval_user_data;
     cparams.moe_trace_enable              = params.moe_trace_enable;
+    cparams.moe_trace_granularity         = params.moe_trace_granularity.c_str();
     cparams.moe_trace_path                = params.moe_trace_path.c_str();
     cparams.moe_trace_format              = params.moe_trace_format.c_str();
     cparams.moe_trace_precision           = params.moe_trace_precision.c_str();

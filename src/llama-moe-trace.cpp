@@ -10,6 +10,7 @@
 
 #define LLAMA_MOE_TRACE_TOPK_PREFIX "ffn_moe_topk-"
 #define LLAMA_MOE_TRACE_EXPERT_IN_PREFIX "ffn_moe_expert_in-"
+#define LLAMA_MOE_TRACE_LAYER_IN_PREFIX "ffn_moe_layer_in-"
 
 static bool llama_moe_trace_supports_input_type(enum ggml_type type) {
     return type == GGML_TYPE_F32 || type == GGML_TYPE_F16 || type == GGML_TYPE_BF16;
@@ -99,6 +100,14 @@ llama_moe_trace::llama_moe_trace(
         LLAMA_LOG_WARN("%s: MoE trace enabled but model has no MoE layers - no rows will be emitted\n", __func__);
     }
 
+    if (config.granularity != "layer" && config.granularity != "expert") {
+        LLAMA_LOG_WARN("%s: unsupported moe trace granularity '%s' - expected 'layer' or 'expert'\n", __func__, config.granularity.c_str());
+        if (config.strict) {
+            throw std::runtime_error("invalid moe trace granularity");
+        }
+        return;
+    }
+
     if (config.format != "jsonl") {
         LLAMA_LOG_WARN("%s: unsupported moe trace format '%s' - expected 'jsonl'\n", __func__, config.format.c_str());
         if (config.strict) {
@@ -169,7 +178,10 @@ bool llama_moe_trace::wants_tensor(const char * tensor_name) const {
     if (!active || degraded || tensor_name == nullptr) {
         return false;
     }
-    return strcmp(tensor_name, "ffn_moe_topk") == 0 || strcmp(tensor_name, "ffn_moe_expert_in") == 0;
+    if (config.granularity == "layer") {
+        return strcmp(tensor_name, "ffn_moe_layer_in") == 0;
+    }
+    return strcmp(tensor_name, "ffn_moe_topk") == 0 || strcmp(tensor_name, "ffn_moe_expert_in") == 0 || strcmp(tensor_name, "ffn_moe_layer_in") == 0;
 }
 
 void llama_moe_trace::set_ubatch(const llama_ubatch & ubatch) {
@@ -193,6 +205,10 @@ bool llama_moe_trace::capture_eval(ggml_tensor * t) {
     if (strncmp(name, LLAMA_MOE_TRACE_EXPERT_IN_PREFIX, strlen(LLAMA_MOE_TRACE_EXPERT_IN_PREFIX)) == 0) {
         const int il = std::atoi(name + strlen(LLAMA_MOE_TRACE_EXPERT_IN_PREFIX));
         return on_expert_in(t, il);
+    }
+    if (strncmp(name, LLAMA_MOE_TRACE_LAYER_IN_PREFIX, strlen(LLAMA_MOE_TRACE_LAYER_IN_PREFIX)) == 0) {
+        const int il = std::atoi(name + strlen(LLAMA_MOE_TRACE_LAYER_IN_PREFIX));
+        return on_layer_in(t, il);
     }
     return true;
 }
@@ -225,6 +241,58 @@ bool llama_moe_trace::on_topk(ggml_tensor * t, int il) {
     st.topk.resize((size_t) (n_expert_used * n_tokens));
     std::copy(topk, topk + st.topk.size(), st.topk.begin());
     st.has_topk = true;
+    return true;
+}
+
+bool llama_moe_trace::on_layer_in(ggml_tensor * t, int il) {
+    if (t == nullptr || t->data == nullptr || !llama_moe_trace_supports_input_type(t->type)) {
+        rows_dropped_shape += 1;
+        rows_dropped_total += 1;
+        return true;
+    }
+
+    const int64_t d_model = t->ne[0];
+    const int64_t n_tokens = t->ne[1];
+    if (d_model <= 0 || n_tokens <= 0) {
+        return true;
+    }
+
+    if (!has_ubatch_meta || (int64_t) ubatch_meta.size() != n_tokens) {
+        rows_dropped_shape += 1;
+        rows_dropped_total += 1;
+        return true;
+    }
+
+    const size_t s0 = (size_t) t->nb[0];
+    const size_t s1 = (size_t) t->nb[1];
+
+    for (int64_t tok = 0; tok < n_tokens; ++tok) {
+        if (!should_keep(il, -1)) {
+            continue;
+        }
+
+        row out;
+        out.layer = il;
+        out.expert = -1;
+        out.inputs.resize((size_t) d_model);
+        out.seq_id = ubatch_meta[(size_t) tok].seq_id;
+        out.token_pos = ubatch_meta[(size_t) tok].token_pos;
+        out.ubatch_index = ubatch_meta[(size_t) tok].ubatch_index;
+        out.expert_rank = -1;
+
+        for (int64_t i = 0; i < d_model; ++i) {
+            const size_t offset = (size_t) i*s0 + (size_t) tok*s1;
+            float v = llama_moe_trace_read_input_value(t, offset);
+            if (config.precision == "f16") {
+                const ggml_fp16_t h = ggml_fp32_to_fp16(v);
+                v = ggml_fp16_to_fp32(h);
+            }
+            out.inputs[(size_t) i] = v;
+        }
+
+        append_row(std::move(out));
+    }
+
     return true;
 }
 
@@ -367,9 +435,14 @@ bool llama_moe_trace::flush_impl() {
     }
 
     for (const auto & r : row_buffer) {
-        writer << "{\"schema_version\":\"moe_routed_input_jsonl.v1\",\"event\":\"moe_routed_input\",\"layer\":" << r.layer
-               << ",\"expert\":" << r.expert
-               << ",\"inputs\":[";
+        if (config.granularity == "layer") {
+            writer << "{\"schema_version\":\"moe_layer_input_jsonl.v1\",\"event\":\"moe_layer_input\",\"layer\":" << r.layer
+                   << ",\"inputs\":[";
+        } else {
+            writer << "{\"schema_version\":\"moe_routed_input_jsonl.v1\",\"event\":\"moe_routed_input\",\"layer\":" << r.layer
+                   << ",\"expert\":" << r.expert
+                   << ",\"inputs\":[";
+        }
         for (size_t i = 0; i < r.inputs.size(); ++i) {
             if (i > 0) {
                 writer << ',';

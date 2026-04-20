@@ -258,3 +258,46 @@ def test_train_all_experts_emits_merged_report_and_failure_ledger(tmp_path) -> N
     statuses = {entry["status"] for entry in ledger["entries"]}
     assert "train_skipped_missing_weights" in statuses
     assert "train_skipped_missing_cov" in statuses
+
+
+def test_train_all_experts_accepts_layer_only_covariance_for_coverage(tmp_path) -> None:
+    plan_path = tmp_path / "molr_plan.json"
+    cov_path = tmp_path / "covariance_stats.npz"
+    weights_dir = tmp_path / "expert_weights"
+    out_dir = tmp_path / "phase2"
+    weights_dir.mkdir(parents=True, exist_ok=True)
+
+    _write_plan(plan_path, experts=[(0, 0), (0, 1)], k=2, rank=2)
+    np.savez(
+        cov_path,
+        schema_version=np.array("molr_covariance_npz.v2"),
+        granularity=np.array("layer"),
+        model_spec=np.array("unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M"),
+        d_model=np.array(3, dtype=np.int64),
+        layers=np.array([0], dtype=np.int64),
+        sample_count=np.array([32], dtype=np.int64),
+        jitter_used=np.array([0.0], dtype=np.float64),
+        mu=np.zeros((1, 3), dtype=np.float32),
+        chol=np.stack([np.eye(3, dtype=np.float32)], axis=0),
+    )
+
+    exit_code = train_all_main(
+        [
+            "--model",
+            "unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M",
+            "--plan-json",
+            str(plan_path),
+            "--cov-npz",
+            str(cov_path),
+            "--weights-dir",
+            str(weights_dir),
+            "--out-dir",
+            str(out_dir),
+        ]
+    )
+    assert exit_code == 0
+
+    ledger = json.loads((out_dir / "molr_failure_ledger.json").read_text(encoding="utf-8"))
+    statuses = {entry["status"] for entry in ledger["entries"]}
+    assert "train_skipped_missing_cov" not in statuses
+    assert "train_skipped_missing_weights" in statuses

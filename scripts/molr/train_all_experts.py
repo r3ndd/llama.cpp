@@ -16,6 +16,7 @@ if __package__ is None or __package__ == "":
 
 from molr.types import (
     MOLR_COVARIANCE_NPZ_SCHEMA_VERSION,
+    MOLR_COVARIANCE_NPZ_SCHEMA_VERSION_V2,
     MOLR_FAILURE_LEDGER_SCHEMA_VERSION,
     MOLR_PLAN_SCHEMA_VERSION,
     MOLR_VALIDATION_REPORT_SCHEMA_VERSION,
@@ -60,31 +61,46 @@ def _npz_scalar_string(payload: Any, key: str) -> str | None:
     return str(value)
 
 
-def _load_cov_keys(path: Path) -> set[tuple[int, int]]:
+def _load_cov_keys(path: Path) -> tuple[set[tuple[int, int]], set[int]]:
     try:
         payload = np.load(path, allow_pickle=False)
     except Exception as exc:
         raise MolrTrainAllError(f"Failed loading covariance NPZ '{path}': {exc}") from exc
 
     schema_version = _npz_scalar_string(payload, "schema_version")
-    if schema_version is not None and schema_version != MOLR_COVARIANCE_NPZ_SCHEMA_VERSION:
+    accepted_versions = {
+        MOLR_COVARIANCE_NPZ_SCHEMA_VERSION,
+        MOLR_COVARIANCE_NPZ_SCHEMA_VERSION_V2,
+    }
+    if schema_version is not None and schema_version not in accepted_versions:
         raise MolrTrainAllError(
-            f"Covariance NPZ schema mismatch: got '{schema_version}', expected '{MOLR_COVARIANCE_NPZ_SCHEMA_VERSION}'",
+            f"Covariance NPZ schema mismatch: got '{schema_version}', expected one of {sorted(accepted_versions)}",
         )
 
-    if "layers" not in payload or "experts" not in payload:
+    if "layers" not in payload:
         raise MolrTrainAllError(
-            f"Covariance NPZ '{path}' missing required arrays: layers, experts",
+            f"Covariance NPZ '{path}' missing required array: layers",
         )
 
     layers = np.asarray(payload["layers"]).astype(np.int64, copy=False)
-    experts = np.asarray(payload["experts"]).astype(np.int64, copy=False)
-    if layers.ndim != 1 or experts.ndim != 1 or layers.shape[0] != experts.shape[0]:
-        raise MolrTrainAllError(
-            f"Invalid covariance key arrays: layers={layers.shape}, experts={experts.shape}",
-        )
+    if layers.ndim != 1:
+        raise MolrTrainAllError(f"Invalid covariance layer key array: layers={layers.shape}")
 
-    return {(int(layer), int(expert)) for layer, expert in zip(layers.tolist(), experts.tolist())}
+    granularity = _npz_scalar_string(payload, "granularity")
+    layer_keys: set[int] = set()
+
+    if "experts" not in payload:
+        layer_keys = {int(layer) for layer in layers.tolist()}
+        return set(), layer_keys
+
+    experts = np.asarray(payload["experts"]).astype(np.int64, copy=False)
+    if experts.ndim != 1 or layers.shape[0] != experts.shape[0]:
+        raise MolrTrainAllError(f"Invalid covariance key arrays: layers={layers.shape}, experts={experts.shape}")
+
+    if granularity == "layer":
+        layer_keys = {int(layer) for layer in layers.tolist()}
+
+    return {(int(layer), int(expert)) for layer, expert in zip(layers.tolist(), experts.tolist())}, layer_keys
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -273,7 +289,7 @@ def main(argv: list[str]) -> int:
         if args.max_experts > 0:
             experts_plan = experts_plan[: int(args.max_experts)]
 
-        cov_keys = _load_cov_keys(cov_path)
+        cov_keys, cov_layer_keys = _load_cov_keys(cov_path)
         script_path = Path(__file__).resolve().parent / "train_expert_molr.py"
         if not script_path.is_file():
             raise MolrTrainAllError(f"train_expert_molr.py not found at '{script_path}'")
@@ -291,7 +307,8 @@ def main(argv: list[str]) -> int:
             checkpoint_out = checkpoints_dir / f"molr_expert_{layer}_{expert}.npz"
             validation_out = validations_dir / f"molr_validation_{layer}_{expert}.json"
 
-            if key not in cov_keys:
+            has_cov = (key in cov_keys) or (layer in cov_layer_keys)
+            if not has_cov:
                 failure_rows.append(
                     {
                         "layer": layer,

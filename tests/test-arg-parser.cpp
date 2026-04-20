@@ -121,6 +121,7 @@ int main(void) {
     argv = {
         "binary_name",
         "--moe-trace",
+        "--moe-trace-granularity", "layer",
         "--moe-trace-path", "trace.jsonl",
         "--moe-trace-format", "jsonl",
         "--moe-trace-precision", "f32",
@@ -134,6 +135,7 @@ int main(void) {
     };
     assert(true == common_params_parse(argv.size(), list_str_to_char(argv).data(), params, LLAMA_EXAMPLE_COMMON));
     assert(params.moe_trace_enable == true);
+    assert(params.moe_trace_granularity == "layer");
     assert(params.moe_trace_path == "trace.jsonl");
     assert(params.moe_trace_format == "jsonl");
     assert(params.moe_trace_precision == "f32");
@@ -183,11 +185,13 @@ int main(void) {
     assert(params.cpuparams.n_threads == 1010);
 
     setenv("LLAMA_MOE_TRACE_ENABLE", "1", true);
+    setenv("LLAMA_MOE_TRACE_GRANULARITY", "layer", true);
     setenv("LLAMA_MOE_TRACE_JSONL", "trace-env.jsonl", true);
     setenv("LLAMA_MOE_TRACE_FORMAT", "jsonl", true);
     argv = {"binary_name"};
     assert(true == common_params_parse(argv.size(), list_str_to_char(argv).data(), params, LLAMA_EXAMPLE_COMMON));
     assert(params.moe_trace_enable == true);
+    assert(params.moe_trace_granularity == "layer");
     assert(params.moe_trace_path == "trace-env.jsonl");
     assert(params.moe_trace_format == "jsonl");
 

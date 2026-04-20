@@ -16,6 +16,7 @@ if __package__ is None or __package__ == "":
 
 from molr.types import (
     MOLR_COVARIANCE_NPZ_SCHEMA_VERSION,
+    MOLR_COVARIANCE_NPZ_SCHEMA_VERSION_V2,
     MOLR_EXPERT_CHECKPOINT_SCHEMA_VERSION,
     MOLR_EXPERT_VALIDATION_SCHEMA_VERSION,
     MOLR_EXPERT_WEIGHTS_NPZ_SCHEMA_VERSION,
@@ -269,32 +270,53 @@ def _lookup_covariance(path: Path, *, layer: int, expert: int) -> tuple[np.ndarr
     payload = _load_npz(path)
 
     schema_version = _npz_scalar_string(payload, "schema_version")
-    if schema_version is not None and schema_version != MOLR_COVARIANCE_NPZ_SCHEMA_VERSION:
+    accepted_versions = {
+        MOLR_COVARIANCE_NPZ_SCHEMA_VERSION,
+        MOLR_COVARIANCE_NPZ_SCHEMA_VERSION_V2,
+    }
+    if schema_version is not None and schema_version not in accepted_versions:
         raise MolrTrainError(
-            f"covariance NPZ schema mismatch: got '{schema_version}', expected '{MOLR_COVARIANCE_NPZ_SCHEMA_VERSION}'",
+            f"covariance NPZ schema mismatch: got '{schema_version}', expected one of {sorted(accepted_versions)}",
         )
 
-    for key in ("layers", "experts", "mu", "chol"):
+    for key in ("layers", "mu", "chol"):
         if key not in payload:
             raise MolrTrainError(f"covariance NPZ '{path}' missing required array '{key}'")
 
+    granularity = _npz_scalar_string(payload, "granularity")
+    if granularity is None:
+        granularity = "expert" if "experts" in payload else "layer"
+
     layers = np.asarray(payload["layers"]).astype(np.int64, copy=False)
-    experts = np.asarray(payload["experts"]).astype(np.int64, copy=False)
     mu = np.asarray(payload["mu"]).astype(np.float64, copy=False)
     chol = np.asarray(payload["chol"]).astype(np.float64, copy=False)
 
     if mu.ndim != 2 or chol.ndim != 3:
         raise MolrTrainError(f"Invalid covariance shapes: mu={mu.shape}, chol={chol.shape}")
-    if layers.ndim != 1 or experts.ndim != 1:
-        raise MolrTrainError(f"Invalid covariance key shapes: layers={layers.shape}, experts={experts.shape}")
-    if not (layers.shape[0] == experts.shape[0] == mu.shape[0] == chol.shape[0]):
+    if layers.ndim != 1:
+        raise MolrTrainError(f"Invalid covariance key shape: layers={layers.shape}")
+    if not (layers.shape[0] == mu.shape[0] == chol.shape[0]):
         raise MolrTrainError("Covariance arrays are not aligned on expert axis.")
 
-    matches = np.where((layers == layer) & (experts == expert))[0]
+    matches = np.array([], dtype=np.int64)
+    used_layer_fallback = False
+    if "experts" in payload and granularity != "layer":
+        experts = np.asarray(payload["experts"]).astype(np.int64, copy=False)
+        if experts.ndim != 1 or experts.shape[0] != layers.shape[0]:
+            raise MolrTrainError(f"Invalid covariance expert key shape: experts={experts.shape}")
+        matches = np.where((layers == layer) & (experts == expert))[0]
+
     if matches.size == 0:
-        raise MolrTrainError(f"No covariance entry for expert (layer={layer}, expert={expert})")
+        # fallback to layer-level covariance when expert row is unavailable
+        used_layer_fallback = True
+        matches = np.where(layers == layer)[0]
+
+    if matches.size == 0:
+        raise MolrTrainError(f"No covariance entry for expert/layer (layer={layer}, expert={expert})")
     if matches.size > 1:
-        raise MolrTrainError(f"Duplicate covariance entries for expert (layer={layer}, expert={expert})")
+        if used_layer_fallback:
+            raise MolrTrainError(f"Duplicate layer covariance entries for layer={layer}")
+        raise MolrTrainError(f"Duplicate covariance entries for resolved key (layer={layer}, expert={expert})")
 
     idx = int(matches[0])
     return mu[idx], chol[idx]

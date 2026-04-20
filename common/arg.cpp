@@ -908,6 +908,13 @@ bool common_params_parse(int argc, char ** argv, common_params & params, llama_e
     }
 
     if (params.moe_trace_enable) {
+        if (!params.moe_trace_granularity.empty() && params.moe_trace_granularity != "layer" && params.moe_trace_granularity != "expert") {
+            fprintf(stderr, "warning: unsupported --moe-trace-granularity '%s'; expected layer or expert\n", params.moe_trace_granularity.c_str());
+            if (params.moe_trace_strict) {
+                return false;
+            }
+        }
+
         if (!params.moe_trace_format.empty() && params.moe_trace_format != "jsonl") {
             fprintf(stderr, "warning: unsupported --moe-trace-format '%s'; only 'jsonl' is currently supported\n", params.moe_trace_format.c_str());
             if (params.moe_trace_strict) {
@@ -2335,21 +2342,29 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
     ).set_env("LLAMA_ARG_CPU_MOE"));
     add_opt(common_arg(
         {"--moe-trace"},
-        string_format("whether to capture routed MoE expert inputs to trace output (default: %s)", params.moe_trace_enable ? "enabled" : "disabled"),
+        string_format("whether to capture MoE layer/expert inputs to trace output (default: %s)", params.moe_trace_enable ? "enabled" : "disabled"),
         [](common_params & params) {
             params.moe_trace_enable = true;
         }
     ).set_env("LLAMA_MOE_TRACE_ENABLE"));
     add_opt(common_arg(
         {"--no-moe-trace"},
-        string_format("disable routed MoE expert-input tracing (default: %s)", params.moe_trace_enable ? "disabled" : "enabled"),
+        string_format("disable MoE input tracing (default: %s)", params.moe_trace_enable ? "disabled" : "enabled"),
         [](common_params & params) {
             params.moe_trace_enable = false;
         }
     ));
     add_opt(common_arg(
+        {"--moe-trace-granularity"}, "{layer,expert}",
+        string_format("MoE trace capture granularity (default: %s)", params.moe_trace_granularity.c_str()),
+        [](common_params & params, const std::string & value) {
+            params.moe_trace_granularity = value;
+            params.moe_trace_enable = true;
+        }
+    ).set_env("LLAMA_MOE_TRACE_GRANULARITY"));
+    add_opt(common_arg(
         {"--moe-trace-path"}, "PATH",
-        string_format("path for MoE routed-input trace output (default: '%s')", params.moe_trace_path.c_str()),
+        string_format("path for MoE input trace output (default: '%s')", params.moe_trace_path.c_str()),
         [](common_params & params, const std::string & value) {
             params.moe_trace_path = value;
             params.moe_trace_enable = true;

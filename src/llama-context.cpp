@@ -18,6 +18,7 @@
 
 #define LLAMA_MOE_TRACE_TOPK_PREFIX "ffn_moe_topk-"
 #define LLAMA_MOE_TRACE_EXPERT_IN_PREFIX "ffn_moe_expert_in-"
+#define LLAMA_MOE_TRACE_LAYER_IN_PREFIX "ffn_moe_layer_in-"
 
 //
 // llama_context
@@ -68,6 +69,7 @@ llama_context::llama_context(
     cparams.cb_eval_user_data = params.cb_eval_user_data;
 
     cparams.moe_trace_enable              = params.moe_trace_enable;
+    cparams.moe_trace_granularity         = params.moe_trace_granularity;
     cparams.moe_trace_path                = params.moe_trace_path;
     cparams.moe_trace_format              = params.moe_trace_format;
     cparams.moe_trace_precision           = params.moe_trace_precision;
@@ -79,10 +81,12 @@ llama_context::llama_context(
     cparams.moe_trace_flush_interval_ms   = params.moe_trace_flush_interval_ms;
     cparams.moe_trace_strict              = params.moe_trace_strict;
 
+    moe_trace_granularity = cparams.moe_trace_granularity ? cparams.moe_trace_granularity : "layer";
     moe_trace_path      = cparams.moe_trace_path      ? cparams.moe_trace_path      : "";
     moe_trace_format    = cparams.moe_trace_format    ? cparams.moe_trace_format    : "jsonl";
     moe_trace_precision = cparams.moe_trace_precision ? cparams.moe_trace_precision : "f16";
 
+    cparams.moe_trace_granularity = moe_trace_granularity.c_str();
     cparams.moe_trace_path      = moe_trace_path.c_str();
     cparams.moe_trace_format    = moe_trace_format.c_str();
     cparams.moe_trace_precision = moe_trace_precision.c_str();
@@ -96,6 +100,7 @@ llama_context::llama_context(
 
     llama_moe_trace_config trace_cfg;
     trace_cfg.enabled             = cparams.moe_trace_enable;
+    trace_cfg.granularity         = moe_trace_granularity;
     trace_cfg.path                = moe_trace_path;
     trace_cfg.format              = moe_trace_format;
     trace_cfg.precision           = moe_trace_precision;
@@ -2317,8 +2322,17 @@ bool llama_context::graph_eval_trace_wants(const ggml_tensor * t) const {
         return false;
     }
 
-    return strncmp(t->name, LLAMA_MOE_TRACE_TOPK_PREFIX, strlen(LLAMA_MOE_TRACE_TOPK_PREFIX)) == 0 ||
-           strncmp(t->name, LLAMA_MOE_TRACE_EXPERT_IN_PREFIX, strlen(LLAMA_MOE_TRACE_EXPERT_IN_PREFIX)) == 0;
+    if (strncmp(t->name, LLAMA_MOE_TRACE_TOPK_PREFIX, strlen(LLAMA_MOE_TRACE_TOPK_PREFIX)) == 0) {
+        return moe_trace->wants_tensor("ffn_moe_topk");
+    }
+    if (strncmp(t->name, LLAMA_MOE_TRACE_EXPERT_IN_PREFIX, strlen(LLAMA_MOE_TRACE_EXPERT_IN_PREFIX)) == 0) {
+        return moe_trace->wants_tensor("ffn_moe_expert_in");
+    }
+    if (strncmp(t->name, LLAMA_MOE_TRACE_LAYER_IN_PREFIX, strlen(LLAMA_MOE_TRACE_LAYER_IN_PREFIX)) == 0) {
+        return moe_trace->wants_tensor("ffn_moe_layer_in");
+    }
+
+    return false;
 }
 
 bool llama_context::graph_eval_trace(ggml_tensor * t) {
@@ -3011,6 +3025,7 @@ llama_context_params llama_context_default_params() {
         /*.cb_eval                     =*/ nullptr,
         /*.cb_eval_user_data           =*/ nullptr,
         /*.moe_trace_enable            =*/ false,
+        /*.moe_trace_granularity       =*/ nullptr,
         /*.moe_trace_path              =*/ nullptr,
         /*.moe_trace_format            =*/ nullptr,
         /*.moe_trace_precision         =*/ nullptr,

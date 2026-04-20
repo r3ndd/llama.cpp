@@ -32,14 +32,15 @@ Phase 0 goal (from design): produce and archive a reproducible spectral baseline
   - nearest-above fraction-grid energy policy,
   - strided rank-index assignment map for K components,
   - explicit accounting for skipped matrix records.
-- `capture_expert_covariance.py`: scaffold for routed-input covariance contracts:
+- `capture_expert_covariance.py`: layer-input-first covariance contracts:
   - consumes pre-captured routed inputs contract NPZ (`inputs`, `layers`, `experts`),
-  - supports integrated capture mode behind explicit `--capture-routed-traces`,
-  - computes per-expert `mu` and Cholesky factors with jitter retries,
-  - can fallback to layer-wide inputs for under-sampled experts via explicit flag,
-  - emits `covariance_stats.npz` + `covariance_summary.json`,
-  - optionally emits routed trace artifact NPZ (`molr_routed_traces_npz.v1`),
-  - tracks explicit per-expert failure reasons,
+  - supports integrated capture mode behind explicit `--capture-layer-traces` (`--capture-routed-traces` kept as deprecated alias),
+  - defaults to layer-granularity covariance fitting (`--input-granularity auto|layer`),
+  - computes per-layer `mu` and Cholesky factors with jitter retries,
+  - emits `covariance_stats.npz` + `covariance_summary.json` in v2 schema for layer mode,
+  - supports compatibility expert mode (`--input-granularity expert`) with v1 output,
+  - optionally emits layer trace artifact NPZ (`molr_layer_traces_npz.v1`) in layer mode,
+  - tracks explicit layer/expert failure reasons,
   - supports `--allow-empty` for scaffold-only runs when routed-input capture integration is not yet wired.
 
 ## What is included in Phase 2
@@ -173,28 +174,30 @@ python scripts/molr/capture_expert_covariance.py \
   --out-json "<run>/covariance_summary.json"
 ```
 
-Optional layer-fallback semantics for low-sample experts:
+Optional compatibility expert-granularity mode:
 
 ```bash
 python scripts/molr/capture_expert_covariance.py \
   --model "unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M" \
   --tokens 50000 \
+  --input-granularity expert \
   --routed-inputs-npz "<run>/routed_inputs_contract.npz" \
   --min-samples-per-expert 16 \
-  --fallback-to-layer-inputs-on-low-samples \
-  --min-layer-samples-for-fallback 32 \
   --out-npz "<run>/covariance_stats.npz" \
   --out-json "<run>/covariance_summary.json"
 ```
 
 Required routed-input NPZ arrays:
-- `inputs`: float array shaped `[N, d_model]`
-- `layers`: int array shaped `[N]`
-- `experts`: int array shaped `[N]`
+- layer mode: `inputs` (`[N, d_model]`), `layers` (`[N]`)
+- expert mode: `inputs` (`[N, d_model]`), `layers` (`[N]`), `experts` (`[N]`)
 
 Covariance artifact schema versions:
-- `covariance_summary.json`: `molr_covariance_summary.v1`
-- `covariance_stats.npz`: `molr_covariance_npz.v1`
+- layer mode (default):
+  - `covariance_summary.json`: `molr_covariance_summary.v2`
+  - `covariance_stats.npz`: `molr_covariance_npz.v2` with `granularity="layer"`
+- expert mode (compatibility):
+  - `covariance_summary.json`: `molr_covariance_summary.v1`
+  - `covariance_stats.npz`: `molr_covariance_npz.v1`
 
 If routed capture data is unavailable yet, you can produce explicit empty scaffold artifacts:
 
@@ -213,16 +216,18 @@ Integrated capture mode (explicit trigger):
 python scripts/molr/capture_expert_covariance.py \
   --model "unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M" \
   --tokens 50000 \
-  --capture-routed-traces \
-  --capture-prompts-jsonl "<run>/capture_prompt_inference.jsonl" \
+  --capture-layer-traces \
+  --capture-prompts-jsonl "scripts/molr/layer_capture_prompts.json" \
   --capture-trace-jsonl "<run>/moe_routed_trace.jsonl" \
   --capture-seed 42 \
-  --min-samples-per-expert 16 \
-  --fallback-to-layer-inputs-on-low-samples \
-  --out-routed-traces-npz "<run>/routed_traces.npz" \
+  --min-samples-per-layer 16 \
+  --out-layer-traces-npz "<run>/layer_traces.npz" \
   --out-npz "<run>/covariance_stats.npz" \
   --out-json "<run>/covariance_summary.json"
 ```
+
+Starter prompt set (safe, non-sensitive, multi-domain) is provided at:
+- `scripts/molr/layer_capture_prompts.json`
 
 Capture mode `--capture-prompts-jsonl` input contract:
 
@@ -240,10 +245,11 @@ Each record schema:
 Runtime capture bridge behavior:
 - For each record, the script runs `llama-cli` (or `--capture-llama-cli`) with MoE routed tracing enabled.
 - The script requires a routed-trace sink path via `--capture-trace-jsonl` or `LLAMA_MOE_TRACE_JSONL`.
-- The bridge expects trace JSONL rows with `layer`, `expert`, and `inputs` (optionally nested under `data`).
+- The bridge accepts trace JSONL rows with `layer` + `inputs` (layer events) and legacy routed rows (`layer`, `expert`, `inputs`).
 
 Runtime MoE trace controls (default off, additive):
 - `--moe-trace` / `--no-moe-trace`
+- `--moe-trace-granularity {layer,expert}`
 - `--moe-trace-path PATH` (env: `LLAMA_MOE_TRACE_JSONL`)
 - `--moe-trace-format jsonl` (env: `LLAMA_MOE_TRACE_FORMAT`)
 - `--moe-trace-precision {f16,f32}`
@@ -259,10 +265,11 @@ Privacy/safety note:
 - Routed MoE input vectors may leak prompt semantics; keep trace files on restricted local storage.
 
 Flag compatibility highlights:
-- `--capture-routed-traces` is mutually exclusive with `--routed-inputs-npz`
+- `--capture-layer-traces` is mutually exclusive with `--routed-inputs-npz`
 - `--capture-prompts-jsonl` is required when capture mode is enabled
 - `--capture-trace-jsonl` (or env `LLAMA_MOE_TRACE_JSONL`) is required in capture mode
-- `--out-routed-traces-npz` is valid only in capture mode
+- `--out-layer-traces-npz` is valid only in capture mode
+- `--capture-routed-traces` is accepted as a deprecated alias during transition
 
 Summary accounting adds per-expert sample provenance fields:
 - `sample_source` (`routed` or `layer_fallback`)

@@ -15,6 +15,7 @@
 
 struct llama_moe_trace_config {
     bool        enabled              = false;
+    std::string granularity          = "layer";
     std::string path                 = "";
     std::string format               = "jsonl";
     std::string precision            = "f16";
@@ -73,6 +74,7 @@ private:
 
     bool init_writer();
     bool on_topk(ggml_tensor * t, int il);
+    bool on_layer_in(ggml_tensor * t, int il);
     bool on_expert_in(ggml_tensor * t, int il);
     void build_token_meta(const llama_ubatch & ubatch, std::vector<token_meta> & out) const;
     bool should_keep(int32_t layer, int32_t expert);

@@ -21,7 +21,10 @@ if __package__ is None or __package__ == "":
 from molr.types import (
     CHOLESKY_JITTER_SCHEDULE,
     MOLR_COVARIANCE_NPZ_SCHEMA_VERSION,
+    MOLR_COVARIANCE_NPZ_SCHEMA_VERSION_V2,
     MOLR_COVARIANCE_SUMMARY_SCHEMA_VERSION,
+    MOLR_COVARIANCE_SUMMARY_SCHEMA_VERSION_V2,
+    MOLR_LAYER_TRACES_NPZ_SCHEMA_VERSION,
     MOLR_ROUTED_TRACES_NPZ_SCHEMA_VERSION,
 )
 
@@ -112,9 +115,20 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--input-granularity",
+        choices=("layer", "expert", "auto"),
+        default="auto",
+        help="Input aggregation granularity for covariance fitting. 'auto' defaults to layer mode.",
+    )
+    parser.add_argument(
+        "--capture-layer-traces",
+        action="store_true",
+        help="Run integrated layer-input trace capture from prompts instead of consuming --routed-inputs-npz.",
+    )
+    parser.add_argument(
         "--capture-routed-traces",
         action="store_true",
-        help="Run integrated routed-trace capture from prompts instead of consuming --routed-inputs-npz.",
+        help="Deprecated alias for --capture-layer-traces.",
     )
     parser.add_argument(
         "--capture-prompts-jsonl",
@@ -165,7 +179,13 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--min-samples-per-expert",
         type=int,
         default=16,
-        help="Minimum routed samples required to compute covariance per expert. Default: 16.",
+        help="Minimum samples required per expert (expert mode) or compatibility alias for layer mode.",
+    )
+    parser.add_argument(
+        "--min-samples-per-layer",
+        type=int,
+        default=0,
+        help="Minimum samples required per layer in layer mode. 0 means use --min-samples-per-expert.",
     )
     parser.add_argument(
         "--fallback-to-layer-inputs-on-low-samples",
@@ -190,7 +210,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--out-routed-traces-npz",
         default="",
-        help="Optional output path for routed trace artifact NPZ.",
+        help="Optional output path for routed trace artifact NPZ (expert mode only).",
+    )
+    parser.add_argument(
+        "--out-layer-traces-npz",
+        default="",
+        help="Optional output path for layer trace artifact NPZ.",
     )
     parser.add_argument(
         "--trace-dtype",
@@ -244,20 +269,60 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         parser.error("--max-trace-samples-per-expert must be >= 0.")
     if args.max_trace_samples_per_layer < 0:
         parser.error("--max-trace-samples-per-layer must be >= 0.")
-    if args.capture_routed_traces and args.routed_inputs_npz:
-        parser.error("--capture-routed-traces is mutually exclusive with --routed-inputs-npz.")
-    if args.capture_routed_traces and not args.capture_prompts_jsonl:
-        parser.error("--capture-prompts-jsonl is required when --capture-routed-traces is enabled.")
-    if (not args.capture_routed_traces) and args.capture_prompts_jsonl:
-        parser.error("--capture-prompts-jsonl requires --capture-routed-traces.")
-    if (not args.capture_routed_traces) and args.capture_trace_jsonl:
-        parser.error("--capture-trace-jsonl requires --capture-routed-traces.")
-    if (not args.capture_routed_traces) and args.capture_llama_cli:
-        parser.error("--capture-llama-cli requires --capture-routed-traces.")
-    if (not args.capture_routed_traces) and args.capture_common_inference_params:
-        parser.error("--capture-common-inference-params requires --capture-routed-traces.")
-    if (not args.capture_routed_traces) and args.out_routed_traces_npz:
-        parser.error("--out-routed-traces-npz requires --capture-routed-traces.")
+    if args.min_samples_per_layer < 0:
+        parser.error("--min-samples-per-layer must be >= 0.")
+
+    capture_routed_alias_used = bool(args.capture_routed_traces)
+    capture_enabled = bool(args.capture_layer_traces or capture_routed_alias_used)
+
+    if capture_enabled and args.routed_inputs_npz:
+        parser.error("--capture-layer-traces/--capture-routed-traces is mutually exclusive with --routed-inputs-npz.")
+    if capture_enabled and not args.capture_prompts_jsonl:
+        parser.error("--capture-prompts-jsonl is required when capture mode is enabled.")
+    if (not capture_enabled) and args.capture_prompts_jsonl:
+        parser.error("--capture-prompts-jsonl requires --capture-layer-traces.")
+    if (not capture_enabled) and args.capture_trace_jsonl:
+        parser.error("--capture-trace-jsonl requires --capture-layer-traces.")
+    if (not capture_enabled) and args.capture_llama_cli:
+        parser.error("--capture-llama-cli requires --capture-layer-traces.")
+    if (not capture_enabled) and args.capture_common_inference_params:
+        parser.error("--capture-common-inference-params requires --capture-layer-traces.")
+    if (not capture_enabled) and args.out_routed_traces_npz:
+        parser.error("--out-routed-traces-npz requires capture mode.")
+    if (not capture_enabled) and args.out_layer_traces_npz:
+        parser.error("--out-layer-traces-npz requires capture mode.")
+
+    if args.input_granularity == "layer" and args.out_routed_traces_npz:
+        parser.error("--out-routed-traces-npz is not valid when --input-granularity=layer.")
+
+    args.capture_layer_traces = capture_enabled
+    args.capture_routed_traces = capture_enabled
+
+    if args.input_granularity == "auto":
+        args.input_granularity_resolved = "layer"
+    else:
+        args.input_granularity_resolved = args.input_granularity
+
+    args.min_samples_per_layer_effective = (
+        int(args.min_samples_per_layer)
+        if int(args.min_samples_per_layer) > 0
+        else int(args.min_samples_per_expert)
+    )
+
+    args.deprecation_warnings = []
+    if capture_routed_alias_used:
+        args.deprecation_warnings.append("--capture-routed-traces is deprecated; use --capture-layer-traces")
+
+    if args.input_granularity_resolved == "layer":
+        if args.fallback_to_layer_inputs_on_low_samples:
+            args.deprecation_warnings.append(
+                "--fallback-to-layer-inputs-on-low-samples is ignored in layer mode",
+            )
+        if int(args.min_layer_samples_for_fallback) > 0:
+            args.deprecation_warnings.append(
+                "--min-layer-samples-for-fallback is ignored in layer mode",
+            )
+
     if args.capture_common_inference_params:
         try:
             common_payload = json.loads(args.capture_common_inference_params)
@@ -390,12 +455,23 @@ def _as_number(value: Any, *, field: str, line_no: int) -> float:
     return out
 
 
-def _extract_trace_fields(raw: Any, *, line_no: int) -> tuple[np.ndarray, int, int] | None:
+def _extract_trace_fields(
+    raw: Any,
+    *,
+    line_no: int,
+    input_granularity: str,
+) -> tuple[np.ndarray, int, int | None] | None:
     if not isinstance(raw, dict):
         return None
 
     event = raw.get("event")
-    if isinstance(event, str) and event not in ("moe_routed_input", "routed_input", "moe.trace.routed_input"):
+    accepted_events = {
+        "moe_routed_input",
+        "routed_input",
+        "moe.trace.routed_input",
+        "moe_layer_input",
+    }
+    if isinstance(event, str) and event not in accepted_events:
         # Ignore unrelated events when a multi-event trace file is used.
         return None
 
@@ -410,12 +486,21 @@ def _extract_trace_fields(raw: Any, *, line_no: int) -> tuple[np.ndarray, int, i
     expert_raw = node.get("expert", node.get("expert_id"))
     inputs_raw = node.get("inputs", node.get("input", node.get("vector")))
 
-    if layer_raw is None or expert_raw is None or inputs_raw is None:
+    if layer_raw is None or inputs_raw is None:
         return None
 
     layer = _as_int(layer_raw, field="layer", line_no=line_no)
-    expert = _as_int(expert_raw, field="expert", line_no=line_no)
     vec = _collect_input_vector(inputs_raw, field="inputs", line_no=line_no)
+
+    if input_granularity == "layer":
+        expert: int | None = None
+        if expert_raw is not None:
+            expert = _as_int(expert_raw, field="expert", line_no=line_no)
+        return vec, layer, expert
+
+    if expert_raw is None:
+        return None
+    expert = _as_int(expert_raw, field="expert", line_no=line_no)
     return vec, layer, expert
 
 
@@ -448,11 +533,16 @@ def _load_routed_trace_jsonl(
         except Exception as exc:
             raise MolrCovarianceError(f"Trace line {idx}: invalid JSON") from exc
 
-        parsed = _extract_trace_fields(payload, line_no=idx)
+        parsed = _extract_trace_fields(
+            payload,
+            line_no=idx,
+            input_granularity=str(args.input_granularity_resolved),
+        )
         if parsed is None:
             continue
 
-        vec, layer, expert = parsed
+        vec, layer, expert_raw = parsed
+        expert = int(expert_raw) if expert_raw is not None else -1
         if d_model is None:
             d_model = int(vec.shape[0])
         elif int(vec.shape[0]) != d_model:
@@ -586,6 +676,7 @@ def _run_inference_capture_bridge(
             env["LLAMA_MOE_TRACE_ENABLE"] = "1"
             env["LLAMA_MOE_TRACE_JSONL"] = str(trace_jsonl_path)
             env["LLAMA_MOE_TRACE_FORMAT"] = "jsonl"
+            env["LLAMA_MOE_TRACE_GRANULARITY"] = str(args.input_granularity_resolved)
             env["LLAMA_MOLR_CAPTURE_SOURCE"] = str(temp_prompt_manifest)
 
             proc = subprocess.run(
@@ -607,13 +698,20 @@ def _run_inference_capture_bridge(
             pass
 
 
-def _load_routed_contract(path: Path, *, expected_model: str | None) -> TraceCaptureResult:
+def _load_routed_contract(
+    path: Path,
+    *,
+    expected_model: str | None,
+    input_granularity: str,
+) -> TraceCaptureResult:
     try:
         payload = np.load(path, allow_pickle=False)
     except Exception as exc:
         raise MolrCovarianceError(f"Failed loading routed-inputs NPZ '{path}': {exc}") from exc
 
-    required = ("inputs", "layers", "experts")
+    required = ("inputs", "layers")
+    if input_granularity == "expert":
+        required = ("inputs", "layers", "experts")
     missing = [name for name in required if name not in payload]
     if missing:
         raise MolrCovarianceError(
@@ -622,20 +720,32 @@ def _load_routed_contract(path: Path, *, expected_model: str | None) -> TraceCap
 
     inputs = np.asarray(payload["inputs"])
     layers = np.asarray(payload["layers"])
-    experts = np.asarray(payload["experts"])
+    experts = np.asarray(payload["experts"]) if "experts" in payload else None
 
     if inputs.ndim != 2:
         raise MolrCovarianceError(f"inputs must be 2D [N,D], got shape={inputs.shape}")
-    if layers.ndim != 1 or experts.ndim != 1:
+    if layers.ndim != 1:
         raise MolrCovarianceError(
-            f"layers/experts must be 1D; got layers={layers.shape}, experts={experts.shape}",
+            f"layers must be 1D; got layers={layers.shape}",
         )
     n_rows = inputs.shape[0]
-    if layers.shape[0] != n_rows or experts.shape[0] != n_rows:
+    if layers.shape[0] != n_rows:
         raise MolrCovarianceError(
             "Row count mismatch in routed-input arrays: "
-            f"inputs={n_rows}, layers={layers.shape[0]}, experts={experts.shape[0]}",
+            f"inputs={n_rows}, layers={layers.shape[0]}",
         )
+    if experts is not None:
+        if experts.ndim != 1:
+            raise MolrCovarianceError(f"experts must be 1D; got experts={experts.shape}")
+        if experts.shape[0] != n_rows:
+            raise MolrCovarianceError(
+                "Row count mismatch in routed-input arrays: "
+                f"inputs={n_rows}, layers={layers.shape[0]}, experts={experts.shape[0]}",
+            )
+    elif input_granularity == "layer":
+        experts = np.full((n_rows,), -1, dtype=np.int64)
+    else:
+        raise MolrCovarianceError("expert granularity requires 'experts' array in routed-input NPZ")
     if not np.isfinite(inputs).all():
         raise MolrCovarianceError("inputs contain non-finite values.")
 
@@ -651,7 +761,7 @@ def _load_routed_contract(path: Path, *, expected_model: str | None) -> TraceCap
         d_model=int(inputs.shape[1]),
         routed_inputs=inputs.astype(np.float64, copy=False),
         routed_layers=layers.astype(np.int64, copy=False),
-        routed_experts=experts.astype(np.int64, copy=False),
+        routed_experts=np.asarray(experts).astype(np.int64, copy=False),
     )
 
 
@@ -696,24 +806,44 @@ def _build_empty_artifacts(
     reason: str,
     mode: str,
 ) -> None:
+    granularity = str(args.input_granularity_resolved)
+    schema_version = (
+        MOLR_COVARIANCE_NPZ_SCHEMA_VERSION_V2
+        if granularity == "layer"
+        else MOLR_COVARIANCE_NPZ_SCHEMA_VERSION
+    )
+    summary_schema = (
+        MOLR_COVARIANCE_SUMMARY_SCHEMA_VERSION_V2
+        if granularity == "layer"
+        else MOLR_COVARIANCE_SUMMARY_SCHEMA_VERSION
+    )
+
+    npz_arrays: dict[str, Any] = {
+        "schema_version": np.array(schema_version),
+        "model_spec": np.array(args.model),
+        "d_model": np.array(0, dtype=np.int64),
+        "layers": np.zeros((0,), dtype=np.int64),
+        "sample_count": np.zeros((0,), dtype=np.int64),
+        "jitter_used": np.zeros((0,), dtype=np.float64),
+        "mu": np.zeros((0, 0), dtype=np.float32),
+        "chol": np.zeros((0, 0, 0), dtype=np.float32),
+    }
+    if granularity == "layer":
+        npz_arrays["granularity"] = np.array("layer")
+    else:
+        npz_arrays["experts"] = np.zeros((0,), dtype=np.int64)
+
     _save_npz(
         out_npz_path,
-        schema_version=np.array(MOLR_COVARIANCE_NPZ_SCHEMA_VERSION),
-        model_spec=np.array(args.model),
-        d_model=np.array(0, dtype=np.int64),
-        layers=np.zeros((0,), dtype=np.int64),
-        experts=np.zeros((0,), dtype=np.int64),
-        sample_count=np.zeros((0,), dtype=np.int64),
-        jitter_used=np.zeros((0,), dtype=np.float64),
-        mu=np.zeros((0, 0), dtype=np.float32),
-        chol=np.zeros((0, 0, 0), dtype=np.float32),
+        **npz_arrays,
     )
 
     summary = {
-        "schema_version": MOLR_COVARIANCE_SUMMARY_SCHEMA_VERSION,
+        "schema_version": summary_schema,
         "created_at_utc": _now_utc_iso(),
         "model_spec": args.model,
         "tokens_requested": int(args.tokens),
+        "input_granularity": granularity,
         "input_contract": {
             "mode": mode,
             "routed_inputs_npz": str(args.routed_inputs_npz) if args.routed_inputs_npz else None,
@@ -722,6 +852,7 @@ def _build_empty_artifacts(
         "capture_runtime": {
             "status": mode,
         },
+        "deprecation_warnings": list(getattr(args, "deprecation_warnings", [])),
         "fallback_policy": {
             "enabled": bool(args.fallback_to_layer_inputs_on_low_samples),
             "min_samples_per_expert": int(args.min_samples_per_expert),
@@ -825,6 +956,18 @@ def _compute_covariance(selection: SampleSelection) -> tuple[np.ndarray, np.ndar
     return mu, chol, float(jitter_used), cov_trace
 
 
+def _compute_covariance_for_layer(x: np.ndarray) -> tuple[np.ndarray, np.ndarray, float, float]:
+    sample_count = int(x.shape[0])
+    if sample_count <= 1:
+        raise MolrCovarianceError("insufficient_effective_samples(<=1)")
+    mu = np.mean(x, axis=0, dtype=np.float64)
+    centered = x - mu
+    cov = (centered.T @ centered) / float(sample_count - 1)
+    chol, jitter_used = _cholesky_with_jitter(cov)
+    cov_trace = float(np.trace(cov, dtype=np.float64))
+    return mu, chol, float(jitter_used), cov_trace
+
+
 def _maybe_emit_routed_traces_npz(
     *,
     args: argparse.Namespace,
@@ -847,6 +990,27 @@ def _maybe_emit_routed_traces_npz(
     return str(out_path)
 
 
+def _maybe_emit_layer_traces_npz(
+    *,
+    args: argparse.Namespace,
+    trace: TraceCaptureResult,
+    out_path: Path | None,
+) -> str | None:
+    if out_path is None:
+        return None
+
+    trace_dtype = np.float16 if args.trace_dtype == "float16" else np.float32
+    _save_npz(
+        out_path,
+        schema_version=np.array(MOLR_LAYER_TRACES_NPZ_SCHEMA_VERSION),
+        model_spec=np.array(trace.model_spec),
+        d_model=np.array(int(trace.d_model), dtype=np.int64),
+        inputs=trace.routed_inputs.astype(trace_dtype, copy=False),
+        layers=trace.routed_layers.astype(np.int64, copy=False),
+    )
+    return str(out_path)
+
+
 def main(argv: list[str]) -> int:
     try:
         args = parse_args(argv)
@@ -857,8 +1021,13 @@ def main(argv: list[str]) -> int:
             if args.out_routed_traces_npz
             else None
         )
+        out_layer_traces_path = (
+            Path(args.out_layer_traces_npz).expanduser().resolve()
+            if args.out_layer_traces_npz
+            else None
+        )
 
-        capture_mode = bool(args.capture_routed_traces)
+        capture_mode = bool(args.capture_layer_traces)
         capture_runtime_status = "capture_enabled" if capture_mode else "contract_only"
         capture_dropped_counters: dict[str, int] = {}
         capture_prompt_spec: PromptInferenceSpec | None = None
@@ -883,7 +1052,7 @@ def main(argv: list[str]) -> int:
             if not args.routed_inputs_npz:
                 if not args.allow_empty:
                     raise MolrCovarianceError(
-                        "No --routed-inputs-npz provided. Enable --capture-routed-traces with "
+                        "No --routed-inputs-npz provided. Enable --capture-layer-traces with "
                         "--capture-prompts-jsonl or pass --allow-empty.",
                     )
                 _build_empty_artifacts(
@@ -899,7 +1068,11 @@ def main(argv: list[str]) -> int:
             routed_path = Path(args.routed_inputs_npz).expanduser().resolve()
             if not routed_path.is_file():
                 raise MolrCovarianceError(f"--routed-inputs-npz path is not a file: '{routed_path}'")
-            trace_result = _load_routed_contract(routed_path, expected_model=str(args.model))
+            trace_result = _load_routed_contract(
+                routed_path,
+                expected_model=str(args.model),
+                input_granularity=str(args.input_granularity_resolved),
+            )
 
         if trace_result.routed_inputs.shape[0] == 0:
             if args.allow_empty:
@@ -923,9 +1096,6 @@ def main(argv: list[str]) -> int:
 
         expert_pool, layer_pool = _build_sample_pools(trace_result)
 
-        unique_keys_all = sorted(expert_pool.keys())
-        unique_keys = unique_keys_all if args.max_experts <= 0 else unique_keys_all[: int(args.max_experts)]
-
         success_layers: list[int] = []
         success_experts: list[int] = []
         success_counts: list[int] = []
@@ -939,81 +1109,137 @@ def main(argv: list[str]) -> int:
         fallback_used_total = 0
         fallback_failed_total = 0
 
-        for layer, expert in unique_keys:
-            try:
-                selection = _select_samples_for_expert(
-                    layer=layer,
-                    expert=expert,
-                    expert_pool=expert_pool,
-                    layer_pool=layer_pool,
-                    min_samples_per_expert=int(args.min_samples_per_expert),
-                    fallback_to_layer_inputs_on_low_samples=bool(args.fallback_to_layer_inputs_on_low_samples),
-                    min_layer_samples_for_fallback=int(args.min_layer_samples_for_fallback),
-                )
-            except MolrCovarianceError as exc:
-                reason = str(exc)
-                routed_count = int(expert_pool.get((layer, expert), np.zeros((0, 0), dtype=np.float64)).shape[0])
-                layer_count = int(layer_pool.get(layer, np.zeros((0, 0), dtype=np.float64)).shape[0])
-                if bool(args.fallback_to_layer_inputs_on_low_samples) and routed_count < int(args.min_samples_per_expert):
-                    fallback_failed_total += 1
-                experts_failed.append(
+        if str(args.input_granularity_resolved) == "layer":
+            unique_keys_all = sorted(expert_pool.keys())
+            unique_layers_all = sorted(layer_pool.keys())
+            unique_layers = unique_layers_all if args.max_experts <= 0 else unique_layers_all[: int(args.max_experts)]
+
+            for layer in unique_layers:
+                layer_x = layer_pool.get(layer, np.zeros((0, d_model), dtype=np.float64))
+                layer_count = int(layer_x.shape[0])
+                if layer_count < int(args.min_samples_per_layer_effective):
+                    reason = f"insufficient_layer_samples(<{int(args.min_samples_per_layer_effective)})"
+                    experts_failed.append(
+                        {
+                            "layer": layer,
+                            "sample_count": layer_count,
+                            "reason": reason,
+                        }
+                    )
+                    failure_reasons[reason] += 1
+                    continue
+
+                try:
+                    mu, chol, jitter_used, cov_trace = _compute_covariance_for_layer(layer_x)
+                except MolrCovarianceError as exc:
+                    reason = str(exc)
+                    experts_failed.append(
+                        {
+                            "layer": layer,
+                            "sample_count": layer_count,
+                            "reason": reason,
+                        }
+                    )
+                    failure_reasons[reason] += 1
+                    continue
+
+                success_layers.append(layer)
+                success_counts.append(layer_count)
+                success_jitter.append(float(jitter_used))
+                success_mu.append(mu.astype(np.float32, copy=False))
+                success_chol.append(chol.astype(np.float32, copy=False))
+                experts_succeeded.append(
                     {
                         "layer": layer,
-                        "expert": expert,
-                        "sample_count": routed_count,
-                        "routed_sample_count": routed_count,
-                        "layer_sample_count": layer_count,
-                        "fallback_applied": False,
-                        "reason": reason,
+                        "sample_count": layer_count,
+                        "sample_source": "layer",
+                        "effective_sample_count": layer_count,
+                        "d_model": d_model,
+                        "jitter_used": float(jitter_used),
+                        "cov_trace": float(cov_trace),
                     }
                 )
-                failure_reasons[reason] += 1
-                continue
 
-            try:
-                mu, chol, jitter_used, cov_trace = _compute_covariance(selection)
-            except MolrCovarianceError as exc:
-                reason = str(exc)
-                experts_failed.append(
+            unique_keys: list[tuple[int, int]] = []
+        else:
+            unique_keys_all = sorted(expert_pool.keys())
+            unique_keys = unique_keys_all if args.max_experts <= 0 else unique_keys_all[: int(args.max_experts)]
+
+            for layer, expert in unique_keys:
+                try:
+                    selection = _select_samples_for_expert(
+                        layer=layer,
+                        expert=expert,
+                        expert_pool=expert_pool,
+                        layer_pool=layer_pool,
+                        min_samples_per_expert=int(args.min_samples_per_expert),
+                        fallback_to_layer_inputs_on_low_samples=bool(args.fallback_to_layer_inputs_on_low_samples),
+                        min_layer_samples_for_fallback=int(args.min_layer_samples_for_fallback),
+                    )
+                except MolrCovarianceError as exc:
+                    reason = str(exc)
+                    routed_count = int(expert_pool.get((layer, expert), np.zeros((0, 0), dtype=np.float64)).shape[0])
+                    layer_count = int(layer_pool.get(layer, np.zeros((0, 0), dtype=np.float64)).shape[0])
+                    if bool(args.fallback_to_layer_inputs_on_low_samples) and routed_count < int(args.min_samples_per_expert):
+                        fallback_failed_total += 1
+                    experts_failed.append(
+                        {
+                            "layer": layer,
+                            "expert": expert,
+                            "sample_count": routed_count,
+                            "routed_sample_count": routed_count,
+                            "layer_sample_count": layer_count,
+                            "fallback_applied": False,
+                            "reason": reason,
+                        }
+                    )
+                    failure_reasons[reason] += 1
+                    continue
+
+                try:
+                    mu, chol, jitter_used, cov_trace = _compute_covariance(selection)
+                except MolrCovarianceError as exc:
+                    reason = str(exc)
+                    experts_failed.append(
+                        {
+                            "layer": layer,
+                            "expert": expert,
+                            "sample_count": int(selection.effective_inputs.shape[0]),
+                            "routed_sample_count": selection.routed_sample_count,
+                            "layer_sample_count": selection.layer_sample_count,
+                            "fallback_applied": bool(selection.fallback_applied),
+                            "reason": reason,
+                        }
+                    )
+                    failure_reasons[reason] += 1
+                    continue
+
+                effective_sample_count = int(selection.effective_inputs.shape[0])
+                success_layers.append(layer)
+                success_experts.append(expert)
+                success_counts.append(effective_sample_count)
+                success_jitter.append(float(jitter_used))
+                success_mu.append(mu.astype(np.float32, copy=False))
+                success_chol.append(chol.astype(np.float32, copy=False))
+
+                if selection.fallback_applied:
+                    fallback_used_total += 1
+
+                experts_succeeded.append(
                     {
                         "layer": layer,
                         "expert": expert,
-                        "sample_count": int(selection.effective_inputs.shape[0]),
+                        "sample_count": effective_sample_count,
+                        "sample_source": selection.source,
                         "routed_sample_count": selection.routed_sample_count,
                         "layer_sample_count": selection.layer_sample_count,
+                        "effective_sample_count": effective_sample_count,
                         "fallback_applied": bool(selection.fallback_applied),
-                        "reason": reason,
+                        "d_model": d_model,
+                        "jitter_used": float(jitter_used),
+                        "cov_trace": float(cov_trace),
                     }
                 )
-                failure_reasons[reason] += 1
-                continue
-
-            effective_sample_count = int(selection.effective_inputs.shape[0])
-            success_layers.append(layer)
-            success_experts.append(expert)
-            success_counts.append(effective_sample_count)
-            success_jitter.append(float(jitter_used))
-            success_mu.append(mu.astype(np.float32, copy=False))
-            success_chol.append(chol.astype(np.float32, copy=False))
-
-            if selection.fallback_applied:
-                fallback_used_total += 1
-
-            experts_succeeded.append(
-                {
-                    "layer": layer,
-                    "expert": expert,
-                    "sample_count": effective_sample_count,
-                    "sample_source": selection.source,
-                    "routed_sample_count": selection.routed_sample_count,
-                    "layer_sample_count": selection.layer_sample_count,
-                    "effective_sample_count": effective_sample_count,
-                    "fallback_applied": bool(selection.fallback_applied),
-                    "d_model": d_model,
-                    "jitter_used": float(jitter_used),
-                    "cov_trace": float(cov_trace),
-                }
-            )
 
         if success_mu:
             mu_arr = np.stack(success_mu, axis=0)
@@ -1022,23 +1248,39 @@ def main(argv: list[str]) -> int:
             mu_arr = np.zeros((0, d_model), dtype=np.float32)
             chol_arr = np.zeros((0, d_model, d_model), dtype=np.float32)
 
-        _save_npz(
-            out_npz_path,
-            schema_version=np.array(MOLR_COVARIANCE_NPZ_SCHEMA_VERSION),
-            model_spec=np.array(trace_result.model_spec or str(args.model)),
-            d_model=np.array(d_model, dtype=np.int64),
-            layers=np.asarray(success_layers, dtype=np.int64),
-            experts=np.asarray(success_experts, dtype=np.int64),
-            sample_count=np.asarray(success_counts, dtype=np.int64),
-            jitter_used=np.asarray(success_jitter, dtype=np.float64),
-            mu=mu_arr,
-            chol=chol_arr,
-        )
+        covariance_granularity = str(args.input_granularity_resolved)
+        npz_arrays: dict[str, Any] = {
+            "schema_version": np.array(
+                MOLR_COVARIANCE_NPZ_SCHEMA_VERSION_V2 if covariance_granularity == "layer" else MOLR_COVARIANCE_NPZ_SCHEMA_VERSION,
+            ),
+            "model_spec": np.array(trace_result.model_spec or str(args.model)),
+            "d_model": np.array(d_model, dtype=np.int64),
+            "layers": np.asarray(success_layers, dtype=np.int64),
+            "sample_count": np.asarray(success_counts, dtype=np.int64),
+            "jitter_used": np.asarray(success_jitter, dtype=np.float64),
+            "mu": mu_arr,
+            "chol": chol_arr,
+        }
+        if covariance_granularity == "layer":
+            npz_arrays["granularity"] = np.array("layer")
+        else:
+            npz_arrays["experts"] = np.asarray(success_experts, dtype=np.int64)
 
-        routed_traces_path_str = _maybe_emit_routed_traces_npz(
+        _save_npz(out_npz_path, **npz_arrays)
+
+        routed_traces_path_str = (
+            _maybe_emit_routed_traces_npz(
+                args=args,
+                trace=trace_result,
+                out_path=out_routed_traces_path,
+            )
+            if covariance_granularity == "expert"
+            else None
+        )
+        layer_traces_path_str = _maybe_emit_layer_traces_npz(
             args=args,
             trace=trace_result,
-            out_path=out_routed_traces_path,
+            out_path=out_layer_traces_path,
         )
 
         effective_layer_threshold = (
@@ -1049,6 +1291,7 @@ def main(argv: list[str]) -> int:
 
         input_contract: dict[str, Any] = {
             "mode": capture_runtime_status,
+            "input_granularity": covariance_granularity,
             "routed_inputs_npz_schema": "molr_routed_inputs.v1",
         }
         if capture_mode:
@@ -1059,18 +1302,31 @@ def main(argv: list[str]) -> int:
                 "optional_fields": ["inference_params"],
             }
             input_contract["capture_trace_schema"] = {
-                "required_fields": ["layer", "expert", "inputs"],
-                "accepted_event_names": ["moe_routed_input", "routed_input", "moe.trace.routed_input"],
+                "required_fields": (
+                    ["layer", "expert", "inputs"]
+                    if covariance_granularity == "expert"
+                    else ["layer", "inputs"]
+                ),
+                "accepted_event_names": ["moe_layer_input", "moe_routed_input", "routed_input", "moe.trace.routed_input"],
             }
         else:
             input_contract["routed_inputs_npz"] = str(Path(args.routed_inputs_npz).expanduser().resolve())
-            input_contract["required_arrays"] = ["inputs", "layers", "experts"]
+            input_contract["required_arrays"] = (
+                ["inputs", "layers", "experts"]
+                if covariance_granularity == "expert"
+                else ["inputs", "layers"]
+            )
 
         summary = {
-            "schema_version": MOLR_COVARIANCE_SUMMARY_SCHEMA_VERSION,
+            "schema_version": (
+                MOLR_COVARIANCE_SUMMARY_SCHEMA_VERSION_V2
+                if covariance_granularity == "layer"
+                else MOLR_COVARIANCE_SUMMARY_SCHEMA_VERSION
+            ),
             "created_at_utc": _now_utc_iso(),
             "model_spec": trace_result.model_spec or str(args.model),
             "tokens_requested": int(args.tokens),
+            "input_granularity": covariance_granularity,
             "input_contract": input_contract,
             "capture_runtime": {
                 "status": capture_runtime_status,
@@ -1093,8 +1349,10 @@ def main(argv: list[str]) -> int:
                     else None
                 ),
             },
+            "deprecation_warnings": list(getattr(args, "deprecation_warnings", [])),
             "config": {
                 "min_samples_per_expert": int(args.min_samples_per_expert),
+                "min_samples_per_layer": int(args.min_samples_per_layer_effective),
                 "max_experts": int(args.max_experts),
                 "cholesky_jitter_schedule": list(CHOLESKY_JITTER_SCHEDULE),
             },
@@ -1109,8 +1367,11 @@ def main(argv: list[str]) -> int:
                 "d_model": d_model,
                 "layers_observed_total": len(layer_pool),
                 "experts_observed_total": len(unique_keys_all),
-                "experts_processed_total": len(unique_keys),
+                "experts_processed_total": len(unique_keys) if covariance_granularity == "expert" else None,
+                "layers_processed_total": len(success_layers) if covariance_granularity == "layer" else None,
             },
+            "layers_succeeded_total": len(experts_succeeded) if covariance_granularity == "layer" else None,
+            "layers_failed_total": len(experts_failed) if covariance_granularity == "layer" else None,
             "experts_fallback_used_total": int(fallback_used_total),
             "experts_fallback_failed_total": int(fallback_failed_total),
             "failure_accounting": {
@@ -1123,10 +1384,18 @@ def main(argv: list[str]) -> int:
             "outputs": {
                 "covariance_stats_npz": str(out_npz_path),
                 "covariance_summary_json": str(out_json_path),
-                "covariance_npz_schema_version": MOLR_COVARIANCE_NPZ_SCHEMA_VERSION,
+                "covariance_npz_schema_version": (
+                    MOLR_COVARIANCE_NPZ_SCHEMA_VERSION_V2
+                    if covariance_granularity == "layer"
+                    else MOLR_COVARIANCE_NPZ_SCHEMA_VERSION
+                ),
                 "routed_traces_npz": routed_traces_path_str,
                 "routed_traces_npz_schema_version": (
                     MOLR_ROUTED_TRACES_NPZ_SCHEMA_VERSION if routed_traces_path_str is not None else None
+                ),
+                "layer_traces_npz": layer_traces_path_str,
+                "layer_traces_npz_schema_version": (
+                    MOLR_LAYER_TRACES_NPZ_SCHEMA_VERSION if layer_traces_path_str is not None else None
                 ),
             },
         }

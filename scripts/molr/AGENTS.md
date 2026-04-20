@@ -13,9 +13,10 @@
 
 ## Phase 1 prompt-driven capture bridge (`capture_expert_covariance.py`)
 
-- Input modes are exclusive: contract mode (`--routed-inputs-npz`) vs capture mode (`--capture-routed-traces --capture-prompts-jsonl`). `--out-routed-traces-npz` is capture-only.
+- Input modes are exclusive: contract mode (`--routed-inputs-npz`) vs capture mode (`--capture-layer-traces --capture-prompts-jsonl`, with `--capture-routed-traces` as deprecated alias).
+- Layer granularity is the default (`--input-granularity auto -> layer`): layer-mode contract NPZ only requires `inputs/layers`, while expert mode still requires `inputs/layers/experts`.
 - Prompt source accepts JSON object (`records`), single-record JSON object, JSON array, or JSONL; each record requires `prompt`, optional `inference_params`.
-- Capture bridge runs one `llama-cli` call per prompt, sets `LLAMA_MOE_TRACE_ENABLE=1` and `LLAMA_MOE_TRACE_FORMAT=jsonl`, and forces `--no-display-prompt` for machine-readable traces.
+- Capture bridge runs one `llama-cli` call per prompt, sets `LLAMA_MOE_TRACE_ENABLE=1`, `LLAMA_MOE_TRACE_FORMAT=jsonl`, `LLAMA_MOE_TRACE_GRANULARITY=<resolved granularity>`, and forces `--no-display-prompt` for machine-readable traces.
 - Trace sink path is mandatory in capture mode (`--capture-trace-jsonl` or `LLAMA_MOE_TRACE_JSONL`) and is reset before execution to avoid stale-row contamination.
 - Record-level inference params override `--capture-common-inference-params`; default seed becomes `capture_seed + record_index` only when record seed is absent.
 - Routed trace loader accepts routed-input events and requires `layer/expert/inputs`; vector width (`d_model`) is locked by first valid row and later rows must match.

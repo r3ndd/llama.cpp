@@ -451,6 +451,7 @@ struct common_params {
     void * cb_eval_user_data                 = nullptr;
 
     bool        moe_trace_enable              = false;
+    std::string moe_trace_granularity         = "layer";
     std::string moe_trace_path                = "";
     std::string moe_trace_format              = "jsonl";
     std::string moe_trace_precision           = "f16";

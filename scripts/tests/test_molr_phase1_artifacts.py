@@ -9,8 +9,10 @@ from molr.capture_expert_covariance import main as covariance_main
 from molr.plan_from_svd import main as plan_main
 from molr.types import (
     MOLR_COVARIANCE_NPZ_SCHEMA_VERSION,
-    MOLR_ROUTED_TRACES_NPZ_SCHEMA_VERSION,
+    MOLR_COVARIANCE_NPZ_SCHEMA_VERSION_V2,
     MOLR_COVARIANCE_SUMMARY_SCHEMA_VERSION,
+    MOLR_COVARIANCE_SUMMARY_SCHEMA_VERSION_V2,
+    MOLR_LAYER_TRACES_NPZ_SCHEMA_VERSION,
     MOLR_PLAN_SCHEMA_VERSION,
 )
 
@@ -170,12 +172,13 @@ def test_covariance_scaffold_allow_empty_writes_empty_contract_outputs(tmp_path)
     assert exit_code == 0
 
     summary = json.loads(out_json.read_text(encoding="utf-8"))
-    assert summary["schema_version"] == MOLR_COVARIANCE_SUMMARY_SCHEMA_VERSION
+    assert summary["schema_version"] == MOLR_COVARIANCE_SUMMARY_SCHEMA_VERSION_V2
     assert summary["status"] == "empty"
     assert summary["input_contract"]["mode"] == "contract_only"
 
     payload = np.load(out_npz, allow_pickle=False)
-    assert str(payload["schema_version"]) == MOLR_COVARIANCE_NPZ_SCHEMA_VERSION
+    assert str(payload["schema_version"]) == MOLR_COVARIANCE_NPZ_SCHEMA_VERSION_V2
+    assert str(payload["granularity"]) == "layer"
     assert payload["mu"].shape == (0, 0)
     assert payload["chol"].shape == (0, 0, 0)
 
@@ -220,25 +223,21 @@ def test_covariance_scaffold_contract_computes_success_and_failure_accounting(tm
     assert exit_code == 0
 
     summary = json.loads(out_json.read_text(encoding="utf-8"))
-    assert summary["schema_version"] == MOLR_COVARIANCE_SUMMARY_SCHEMA_VERSION
+    assert summary["schema_version"] == MOLR_COVARIANCE_SUMMARY_SCHEMA_VERSION_V2
     assert summary["failure_accounting"]["experts_succeeded_total"] == 1
-    assert summary["failure_accounting"]["experts_failed_total"] == 1
-    assert summary["failure_accounting"]["by_reason"]["insufficient_samples(<3)"] == 1
+    assert summary["failure_accounting"]["experts_failed_total"] == 0
     assert summary["experts_fallback_used_total"] == 0
     assert summary["experts_fallback_failed_total"] == 0
 
     succeeded = summary["experts_succeeded"][0]
-    assert succeeded["sample_source"] == "routed"
-    assert succeeded["routed_sample_count"] == 3
-    assert succeeded["layer_sample_count"] == 5
-    assert succeeded["effective_sample_count"] == 3
-    assert succeeded["fallback_applied"] is False
+    assert succeeded["sample_source"] == "layer"
+    assert succeeded["effective_sample_count"] == 5
 
     payload = np.load(out_npz, allow_pickle=False)
-    assert str(payload["schema_version"]) == MOLR_COVARIANCE_NPZ_SCHEMA_VERSION
+    assert str(payload["schema_version"]) == MOLR_COVARIANCE_NPZ_SCHEMA_VERSION_V2
+    assert str(payload["granularity"]) == "layer"
     assert payload["d_model"].item() == 2
     assert payload["layers"].shape == (1,)
-    assert payload["experts"].shape == (1,)
     assert payload["mu"].shape == (1, 2)
     assert payload["chol"].shape == (1, 2, 2)
 
@@ -285,16 +284,15 @@ def test_covariance_scaffold_reports_observed_vs_processed_expert_counts(tmp_pat
 
     summary = json.loads(out_json.read_text(encoding="utf-8"))
     assert summary["observed"]["experts_observed_total"] == 2
-    assert summary["observed"]["experts_processed_total"] == 1
+    assert summary["observed"]["experts_processed_total"] is None
+    assert summary["observed"]["layers_processed_total"] == 1
 
 
-def test_covariance_scaffold_uses_layer_fallback_for_under_sampled_expert(tmp_path) -> None:
+def test_covariance_scaffold_ignores_expert_fallback_flags_in_layer_mode(tmp_path) -> None:
     routed_path = tmp_path / "routed_inputs.npz"
     out_npz = tmp_path / "covariance_stats.npz"
     out_json = tmp_path / "covariance_summary.json"
 
-    # Expert (0,0): 3 samples -> routed success
-    # Expert (0,1): 2 samples -> fallback to layer (5 samples) when fallback enabled
     inputs = np.array(
         [
             [1.0, 0.0],
@@ -331,25 +329,22 @@ def test_covariance_scaffold_uses_layer_fallback_for_under_sampled_expert(tmp_pa
     assert exit_code == 0
 
     summary = json.loads(out_json.read_text(encoding="utf-8"))
-    assert summary["failure_accounting"]["experts_succeeded_total"] == 2
+    assert summary["failure_accounting"]["experts_succeeded_total"] == 1
     assert summary["failure_accounting"]["experts_failed_total"] == 0
-    assert summary["experts_fallback_used_total"] == 1
+    assert summary["experts_fallback_used_total"] == 0
     assert summary["experts_fallback_failed_total"] == 0
-
-    fallback_row = next(item for item in summary["experts_succeeded"] if item["expert"] == 1)
-    assert fallback_row["sample_source"] == "layer_fallback"
-    assert fallback_row["routed_sample_count"] == 2
-    assert fallback_row["layer_sample_count"] == 5
-    assert fallback_row["effective_sample_count"] == 5
-    assert fallback_row["fallback_applied"] is True
+    assert summary["deprecation_warnings"]
+    assert summary["experts_succeeded"][0]["sample_source"] == "layer"
+    assert summary["experts_succeeded"][0]["effective_sample_count"] == 5
 
     payload = np.load(out_npz, allow_pickle=False)
-    assert payload["layers"].shape == (2,)
-    assert payload["experts"].shape == (2,)
-    assert payload["sample_count"].tolist() == [3, 5]
+    assert str(payload["schema_version"]) == MOLR_COVARIANCE_NPZ_SCHEMA_VERSION_V2
+    assert str(payload["granularity"]) == "layer"
+    assert payload["layers"].shape == (1,)
+    assert payload["sample_count"].tolist() == [5]
 
 
-def test_covariance_scaffold_fallback_guardrail_failure_reason(tmp_path) -> None:
+def test_covariance_scaffold_min_samples_per_layer_enforced(tmp_path) -> None:
     routed_path = tmp_path / "routed_inputs.npz"
     out_npz = tmp_path / "covariance_stats.npz"
     out_json = tmp_path / "covariance_summary.json"
@@ -378,8 +373,7 @@ def test_covariance_scaffold_fallback_guardrail_failure_reason(tmp_path) -> None
             str(routed_path),
             "--min-samples-per-expert",
             "3",
-            "--fallback-to-layer-inputs-on-low-samples",
-            "--min-layer-samples-for-fallback",
+            "--min-samples-per-layer",
             "6",
             "--out-npz",
             str(out_npz),
@@ -390,14 +384,14 @@ def test_covariance_scaffold_fallback_guardrail_failure_reason(tmp_path) -> None
     assert exit_code == 0
 
     summary = json.loads(out_json.read_text(encoding="utf-8"))
-    assert summary["failure_accounting"]["experts_succeeded_total"] == 1
+    assert summary["failure_accounting"]["experts_succeeded_total"] == 0
     assert summary["failure_accounting"]["experts_failed_total"] == 1
-    assert summary["failure_accounting"]["by_reason"]["insufficient_layer_samples_for_fallback(<6)"] == 1
+    assert summary["failure_accounting"]["by_reason"]["insufficient_layer_samples(<6)"] == 1
     assert summary["experts_fallback_used_total"] == 0
-    assert summary["experts_fallback_failed_total"] == 1
+    assert summary["experts_fallback_failed_total"] == 0
 
 
-def test_covariance_scaffold_capture_mode_with_optional_routed_trace_output(tmp_path) -> None:
+def test_covariance_scaffold_capture_mode_with_optional_layer_trace_output(tmp_path) -> None:
     prompts_path = tmp_path / "prompts.jsonl"
     prompts_path.write_text(
         "\n".join(
@@ -414,7 +408,7 @@ def test_covariance_scaffold_capture_mode_with_optional_routed_trace_output(tmp_
 
     out_npz = tmp_path / "covariance_stats.npz"
     out_json = tmp_path / "covariance_summary.json"
-    out_traces = tmp_path / "routed_traces.npz"
+    out_traces = tmp_path / "layer_traces.npz"
     trace_jsonl = tmp_path / "bridge_trace.jsonl"
 
     prompt_to_trace = {
@@ -456,7 +450,7 @@ def test_covariance_scaffold_capture_mode_with_optional_routed_trace_output(tmp_
                 "--min-samples-per-expert",
                 "3",
                 "--fallback-to-layer-inputs-on-low-samples",
-                "--out-routed-traces-npz",
+                "--out-layer-traces-npz",
                 str(out_traces),
                 "--trace-dtype",
                 "float32",
@@ -475,14 +469,15 @@ def test_covariance_scaffold_capture_mode_with_optional_routed_trace_output(tmp_
     assert summary["input_contract"]["mode"] == "capture_enabled"
     assert summary["capture_runtime"]["trace_jsonl_path"] == str(trace_jsonl.resolve())
     assert summary["capture_runtime"]["prompt_records_total"] == 5
-    assert summary["outputs"]["routed_traces_npz"] == str(out_traces.resolve())
-    assert summary["outputs"]["routed_traces_npz_schema_version"] == MOLR_ROUTED_TRACES_NPZ_SCHEMA_VERSION
+    assert summary["outputs"]["layer_traces_npz"] == str(out_traces.resolve())
+    assert summary["outputs"]["layer_traces_npz_schema_version"] == MOLR_LAYER_TRACES_NPZ_SCHEMA_VERSION
+    assert summary["outputs"]["routed_traces_npz"] is None
+    assert summary["deprecation_warnings"]
 
     traces = np.load(out_traces, allow_pickle=False)
-    assert str(traces["schema_version"]) == MOLR_ROUTED_TRACES_NPZ_SCHEMA_VERSION
+    assert str(traces["schema_version"]) == MOLR_LAYER_TRACES_NPZ_SCHEMA_VERSION
     assert traces["inputs"].shape == (5, 2)
     assert traces["layers"].shape == (5,)
-    assert traces["experts"].shape == (5,)
 
 
 def test_covariance_scaffold_capture_flag_validation_matrix(tmp_path) -> None:
@@ -618,6 +613,7 @@ def test_covariance_scaffold_capture_accepts_json_records_format(tmp_path) -> No
     assert exit_code == 0
     summary = json.loads(out_json.read_text(encoding="utf-8"))
     assert summary["capture_runtime"]["prompt_inference_source_schema"] == "capture_prompt_inference.v1"
+    assert summary["capture_runtime"]["status"] == "capture_enabled"
 
 
 def test_covariance_scaffold_capture_rejects_invalid_prompt_record_schema(tmp_path) -> None:
@@ -645,3 +641,92 @@ def test_covariance_scaffold_capture_rejects_invalid_prompt_record_schema(tmp_pa
         ]
     )
     assert exit_code == 2
+
+
+def test_covariance_scaffold_expert_granularity_preserves_v1_covariance_output(tmp_path) -> None:
+    routed_path = tmp_path / "routed_inputs.npz"
+    out_npz = tmp_path / "covariance_stats.npz"
+    out_json = tmp_path / "covariance_summary.json"
+
+    inputs = np.array(
+        [
+            [1.0, 0.0],
+            [0.5, 0.5],
+            [0.0, 1.0],
+        ],
+        dtype=np.float32,
+    )
+    layers = np.array([0, 0, 0], dtype=np.int64)
+    experts = np.array([0, 0, 0], dtype=np.int64)
+    np.savez(routed_path, inputs=inputs, layers=layers, experts=experts)
+
+    exit_code = covariance_main(
+        [
+            "--model",
+            "unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M",
+            "--tokens",
+            "3",
+            "--input-granularity",
+            "expert",
+            "--routed-inputs-npz",
+            str(routed_path),
+            "--min-samples-per-expert",
+            "3",
+            "--out-npz",
+            str(out_npz),
+            "--out-json",
+            str(out_json),
+        ]
+    )
+    assert exit_code == 0
+
+    summary = json.loads(out_json.read_text(encoding="utf-8"))
+    assert summary["schema_version"] == MOLR_COVARIANCE_SUMMARY_SCHEMA_VERSION
+
+    payload = np.load(out_npz, allow_pickle=False)
+    assert str(payload["schema_version"]) == MOLR_COVARIANCE_NPZ_SCHEMA_VERSION
+    assert payload["experts"].shape == (1,)
+
+
+def test_covariance_scaffold_layer_granularity_accepts_contract_without_experts_array(tmp_path) -> None:
+    routed_path = tmp_path / "routed_inputs_layer_only.npz"
+    out_npz = tmp_path / "covariance_stats_layer.npz"
+    out_json = tmp_path / "covariance_summary_layer.json"
+
+    np.savez(
+        routed_path,
+        inputs=np.array(
+            [
+                [1.0, 0.0],
+                [0.5, 0.5],
+                [0.0, 1.0],
+            ],
+            dtype=np.float32,
+        ),
+        layers=np.array([0, 0, 0], dtype=np.int64),
+    )
+
+    exit_code = covariance_main(
+        [
+            "--model",
+            "unsloth/Qwen3.5-35B-A3B-GGUF:Q4_K_M",
+            "--tokens",
+            "3",
+            "--input-granularity",
+            "layer",
+            "--routed-inputs-npz",
+            str(routed_path),
+            "--min-samples-per-layer",
+            "3",
+            "--out-npz",
+            str(out_npz),
+            "--out-json",
+            str(out_json),
+        ]
+    )
+    assert exit_code == 0
+
+    payload = np.load(out_npz, allow_pickle=False)
+    assert str(payload["schema_version"]) == MOLR_COVARIANCE_NPZ_SCHEMA_VERSION_V2
+    assert str(payload["granularity"]) == "layer"
+    assert "experts" not in payload.files
