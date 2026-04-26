@@ -146,6 +146,8 @@ poetry.toml
 # emscripten
 a.out.*
 
+.conductor*
+
 # Codanna
 .codanna*
 .fastembed_cache
