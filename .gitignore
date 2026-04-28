@@ -157,3 +157,7 @@ a.out.*
 
 AGENTS.local.md
 .pi/SYSTEM.md
+.conductor*
+.codanna*
+.fastembed_cache
+molr-runs

@@ -2,10 +2,12 @@
 #include "common.h"
 #include "log.h"
 #include "llama.h"
+#include "moe-cov-io.h"
 #include "gguf.h"
 
 #include <algorithm>
 #include <chrono>
+#include <cctype>
 #include <clocale>
 #include <cmath>
 #include <cstdio>
@@ -16,9 +18,12 @@
 #include <vector>
 #include <fstream>
 #include <unordered_map>
+#include <unordered_set>
+#include <limits>
 #include <map>
 #include <regex>
 #include <numeric>
+#include <set>
 
 #if defined(_MSC_VER)
 #pragma warning(disable: 4244 4267) // possible loss of data
@@ -30,6 +35,8 @@ static void print_usage(int, char ** argv) {
             "       -m model.gguf -f some-text.txt [-o imatrix.gguf] [--output-format {gguf,dat}] [--no-ppl] \\\n"
             "       [--process-output] [--chunk 123] [--save-frequency 0] [--output-frequency 10] \\\n"
             "       [--in-file imatrix-prev-0.gguf --in-file imatrix-prev-1.gguf ...] [--parse-special] \\\n"
+            "       [--moe-trace-cov --moe-trace-cov-out moe-cov.gguf \\\n"
+            "        --moe-trace-cov-precision {f8,f16,f32,f64} --moe-trace-cov-file-mode {create,append,overwrite}] \\\n"
             "       [--show-statistics] [...]\n" , argv[0]);
     LOG("\n");
 }
@@ -58,6 +65,58 @@ struct tensor_statistics {
     float cossim       = 0.0f;
 };
 
+enum class moe_cov_role {
+    GATE,
+    UP,
+    DOWN,
+};
+
+struct moe_cov_target_key {
+    int32_t layer = -1;
+    int32_t expert = -1;
+    int32_t dim = 0;
+    std::string role;
+    std::string role_variant;
+    std::string tensor_name;
+
+    bool operator==(const moe_cov_target_key & other) const {
+        return layer == other.layer
+            && expert == other.expert
+            && dim == other.dim
+            && role == other.role
+            && role_variant == other.role_variant
+            && tensor_name == other.tensor_name;
+    }
+};
+
+struct moe_cov_target_key_hash {
+    size_t operator()(const moe_cov_target_key & k) const {
+        size_t h = std::hash<int32_t>{}(k.layer);
+        h = h * 1315423911u + std::hash<int32_t>{}(k.expert);
+        h = h * 1315423911u + std::hash<int32_t>{}(k.dim);
+        h = h * 1315423911u + std::hash<std::string>{}(k.role);
+        h = h * 1315423911u + std::hash<std::string>{}(k.role_variant);
+        h = h * 1315423911u + std::hash<std::string>{}(k.tensor_name);
+        return h;
+    }
+};
+
+struct moe_cov_accum {
+    uint64_t n = 0;
+
+    std::vector<int8_t> sum_f8;
+    std::vector<int8_t> outer_f8;
+
+    std::vector<ggml_fp16_t> sum_f16;
+    std::vector<ggml_fp16_t> outer_f16;
+
+    std::vector<float> sum_f32;
+    std::vector<float> outer_f32;
+
+    std::vector<double> sum_f64;
+    std::vector<double> outer_f64;
+};
+
 class IMatrixCollector {
 public:
     IMatrixCollector() = default;
@@ -67,15 +126,38 @@ public:
     void save_imatrix(int32_t n_chunk = -1) const;
     bool load_imatrix_legacy(const char * fname);
     bool load_imatrix(const char * file_name);
+    bool save_moe_covariance(const llama_model * model, std::string & error_msg) const;
     const std::unordered_map<std::string, Stats> & get_mstats() const { return m_stats; }
 private:
+    bool parse_filter_spec(const std::string & spec, std::unordered_set<int32_t> & out) const;
+    void ensure_cov_filters_initialized();
+    bool parse_cov_target_selection(std::set<moe_cov_role> & out_roles) const;
+    bool cov_target_role_enabled(moe_cov_role role) const;
+    bool resolve_moe_cov_target(
+            const ggml_tensor * src0,
+            int32_t input_dim,
+            int32_t expert,
+            moe_cov_target_key & key,
+            bool & should_collect) const;
+    void ensure_cov_accum_capacity(moe_cov_accum & accum, int32_t dim);
+    void cov_update_accum(moe_cov_accum & accum, const float * x, int32_t dim);
+
     std::unordered_map<std::string, Stats> m_stats;
+    std::unordered_map<moe_cov_target_key, moe_cov_accum, moe_cov_target_key_hash> m_cov_stats;
     common_params                          m_params;
     std::mutex                             m_mutex;
     std::vector<std::string>               m_datasets;
     int32_t                                m_last_chunk = 0;
     std::vector<char>                      m_src1_data;
     std::vector<char>                      m_ids; // the expert ids from ggml_mul_mat_id
+
+    bool                                   m_cov_filters_ready = false;
+    std::unordered_set<int32_t>            m_cov_layer_filter;
+    std::unordered_set<int32_t>            m_cov_expert_filter;
+    std::set<moe_cov_role>                 m_cov_role_filter;
+    mutable bool                           m_cov_warned_unknown_role = false;
+    mutable bool                           m_cov_warned_missing_blk = false;
+    mutable bool                           m_cov_warned_merged_gate_up = false;
 };
 
 // remove any prefix and suffixes from the name
@@ -123,6 +205,278 @@ static void process_tensor_name(const std::string & input, std::string & layer, 
     }
     if (layer.empty()) {
         layer = "-";
+    }
+}
+
+static std::string to_lower_ascii(std::string s) {
+    for (char & ch : s) {
+        ch = (char) std::tolower((unsigned char) ch);
+    }
+    return s;
+}
+
+bool IMatrixCollector::parse_filter_spec(const std::string & spec, std::unordered_set<int32_t> & out) const {
+    out.clear();
+    if (spec.empty()) {
+        return true;
+    }
+
+    try {
+        for (auto entry : string_split<std::string>(spec, ',')) {
+            entry = string_strip(entry);
+            if (entry.empty()) {
+                return false;
+            }
+
+            const auto dash = entry.find('-');
+            if (dash == std::string::npos) {
+                const int64_t value = std::stoll(entry);
+                if (value < std::numeric_limits<int32_t>::min() || value > std::numeric_limits<int32_t>::max()) {
+                    return false;
+                }
+                out.insert((int32_t) value);
+                continue;
+            }
+
+            const int64_t start64 = std::stoll(entry.substr(0, dash));
+            const int64_t end64 = std::stoll(entry.substr(dash + 1));
+            if (start64 < std::numeric_limits<int32_t>::min() ||
+                start64 > std::numeric_limits<int32_t>::max() ||
+                end64 < std::numeric_limits<int32_t>::min() ||
+                end64 > std::numeric_limits<int32_t>::max() ||
+                end64 < start64) {
+                return false;
+            }
+
+            const int32_t start = (int32_t) start64;
+            const int32_t end = (int32_t) end64;
+            for (int32_t v = start; v <= end; ++v) {
+                out.insert(v);
+            }
+        }
+    } catch (const std::exception &) {
+        return false;
+    }
+
+    return true;
+}
+
+bool IMatrixCollector::parse_cov_target_selection(std::set<moe_cov_role> & out_roles) const {
+    out_roles.clear();
+    for (auto item : string_split<std::string>(m_params.cov_targets, ',')) {
+        item = to_lower_ascii(string_strip(item));
+        if (item == "all") {
+            out_roles.insert(moe_cov_role::GATE);
+            out_roles.insert(moe_cov_role::UP);
+            out_roles.insert(moe_cov_role::DOWN);
+            return true;
+        }
+        if (item == "gate") {
+            out_roles.insert(moe_cov_role::GATE);
+        } else if (item == "up") {
+            out_roles.insert(moe_cov_role::UP);
+        } else if (item == "down") {
+            out_roles.insert(moe_cov_role::DOWN);
+        } else {
+            return false;
+        }
+    }
+
+    return !out_roles.empty();
+}
+
+void IMatrixCollector::ensure_cov_filters_initialized() {
+    if (m_cov_filters_ready) {
+        return;
+    }
+
+    if (!parse_filter_spec(m_params.cov_layers, m_cov_layer_filter)) {
+        LOG_ERR("%s: failed to parse covariance layer filter '%s'\n", __func__, m_params.cov_layers.c_str());
+    }
+    if (!parse_filter_spec(m_params.cov_experts, m_cov_expert_filter)) {
+        LOG_ERR("%s: failed to parse covariance expert filter '%s'\n", __func__, m_params.cov_experts.c_str());
+    }
+    if (!parse_cov_target_selection(m_cov_role_filter)) {
+        LOG_ERR("%s: failed to parse covariance target filter '%s'\n", __func__, m_params.cov_targets.c_str());
+    }
+
+    m_cov_filters_ready = true;
+}
+
+bool IMatrixCollector::cov_target_role_enabled(moe_cov_role role) const {
+    return m_cov_role_filter.find(role) != m_cov_role_filter.end();
+}
+
+bool IMatrixCollector::resolve_moe_cov_target(
+        const ggml_tensor * src0,
+        int32_t input_dim,
+        int32_t expert,
+        moe_cov_target_key & key,
+        bool & should_collect) const {
+    should_collect = false;
+
+    const std::string tensor_name = filter_tensor_name(src0->name);
+    const std::string name_l = to_lower_ascii(tensor_name);
+
+    const auto blk_pos = name_l.find("blk.");
+    if (blk_pos == std::string::npos) {
+        if (!m_cov_warned_missing_blk) {
+            LOG_WRN("%s: covariance mapping skipped tensor without blk.<id>: %s\n", __func__, tensor_name.c_str());
+            m_cov_warned_missing_blk = true;
+        }
+        return false;
+    }
+
+    size_t idx = blk_pos + 4;
+    size_t end = idx;
+    while (end < name_l.size() && std::isdigit((unsigned char) name_l[end])) {
+        ++end;
+    }
+    if (end == idx) {
+        return false;
+    }
+
+    const int32_t layer = (int32_t) std::stoi(name_l.substr(idx, end - idx));
+
+    if (!m_cov_layer_filter.empty() && m_cov_layer_filter.count(layer) == 0) {
+        return false;
+    }
+
+    if (!m_cov_expert_filter.empty() && m_cov_expert_filter.count(expert) == 0) {
+        return false;
+    }
+
+    moe_cov_role role;
+    std::string role_name;
+    std::string role_variant;
+
+    if (name_l.find("gate_up") != std::string::npos || name_l.find("up_gate") != std::string::npos) {
+        role = moe_cov_role::UP;
+        role_name = "up";
+        role_variant = "gate_up_merged";
+        if (!m_cov_warned_merged_gate_up) {
+            LOG_WRN("%s: covariance role-mapped merged gate/up tensor as role='up' with role_variant='gate_up_merged'\n", __func__);
+            m_cov_warned_merged_gate_up = true;
+        }
+    } else if (name_l.find("ffn_gate_exps") != std::string::npos ||
+        name_l.find("ffn_gate") != std::string::npos ||
+        name_l.find(".w1") != std::string::npos ||
+        name_l.find("_w1") != std::string::npos ||
+        name_l.find(".gate") != std::string::npos) {
+        role = moe_cov_role::GATE;
+        role_name = "gate";
+    } else if (name_l.find("ffn_up_exps") != std::string::npos ||
+               name_l.find("ffn_up") != std::string::npos ||
+               name_l.find(".w3") != std::string::npos ||
+               name_l.find("_w3") != std::string::npos ||
+               name_l.find(".up") != std::string::npos) {
+        role = moe_cov_role::UP;
+        role_name = "up";
+    } else if (name_l.find("ffn_down_exps") != std::string::npos ||
+               name_l.find("ffn_down") != std::string::npos ||
+               name_l.find(".w2") != std::string::npos ||
+               name_l.find("_w2") != std::string::npos ||
+               name_l.find(".down") != std::string::npos) {
+        role = moe_cov_role::DOWN;
+        role_name = "down";
+    } else {
+        if (!m_cov_warned_unknown_role) {
+            LOG_WRN("%s: covariance role mapping skipped unknown expert FFN tensor pattern (example: %s)\n", __func__, tensor_name.c_str());
+            m_cov_warned_unknown_role = true;
+        }
+        return false;
+    }
+
+    if (!cov_target_role_enabled(role)) {
+        return false;
+    }
+
+    key.layer = layer;
+    key.expert = expert;
+    key.dim = input_dim;
+    key.role = std::move(role_name);
+    key.role_variant = std::move(role_variant);
+    key.tensor_name = tensor_name;
+
+    should_collect = true;
+    return true;
+}
+
+void IMatrixCollector::ensure_cov_accum_capacity(moe_cov_accum & accum, int32_t dim) {
+    const size_t d = (size_t) dim;
+    const size_t dd = d * d;
+
+    if (m_params.cov_precision == IMATRIX_COV_F8) {
+        if (accum.sum_f8.empty()) {
+            accum.sum_f8.resize(d, 0);
+            accum.outer_f8.resize(dd, 0);
+        }
+    } else if (m_params.cov_precision == IMATRIX_COV_F16) {
+        if (accum.sum_f16.empty()) {
+            accum.sum_f16.resize(d, ggml_fp32_to_fp16(0.0f));
+            accum.outer_f16.resize(dd, ggml_fp32_to_fp16(0.0f));
+        }
+    } else if (m_params.cov_precision == IMATRIX_COV_F32) {
+        if (accum.sum_f32.empty()) {
+            accum.sum_f32.resize(d, 0.0f);
+            accum.outer_f32.resize(dd, 0.0f);
+        }
+    } else {
+        if (accum.sum_f64.empty()) {
+            accum.sum_f64.resize(d, 0.0);
+            accum.outer_f64.resize(dd, 0.0);
+        }
+    }
+}
+
+void IMatrixCollector::cov_update_accum(moe_cov_accum & accum, const float * x, int32_t dim) {
+    const size_t d = (size_t) dim;
+    accum.n++;
+
+    if (m_params.cov_precision == IMATRIX_COV_F8) {
+        for (size_t j = 0; j < d; ++j) {
+            int v = (int) accum.sum_f8[j] + (int) std::lround(x[j]);
+            v = std::max(-127, std::min(127, v));
+            accum.sum_f8[j] = (int8_t) v;
+        }
+        for (size_t r = 0; r < d; ++r) {
+            for (size_t c = 0; c < d; ++c) {
+                const size_t idx = r*d + c;
+                int v = (int) accum.outer_f8[idx] + (int) std::lround(x[r] * x[c]);
+                v = std::max(-127, std::min(127, v));
+                accum.outer_f8[idx] = (int8_t) v;
+            }
+        }
+    } else if (m_params.cov_precision == IMATRIX_COV_F16) {
+        for (size_t j = 0; j < d; ++j) {
+            const float cur = ggml_fp16_to_fp32(accum.sum_f16[j]);
+            accum.sum_f16[j] = ggml_fp32_to_fp16(cur + x[j]);
+        }
+        for (size_t r = 0; r < d; ++r) {
+            for (size_t c = 0; c < d; ++c) {
+                const size_t idx = r*d + c;
+                const float cur = ggml_fp16_to_fp32(accum.outer_f16[idx]);
+                accum.outer_f16[idx] = ggml_fp32_to_fp16(cur + x[r] * x[c]);
+            }
+        }
+    } else if (m_params.cov_precision == IMATRIX_COV_F32) {
+        for (size_t j = 0; j < d; ++j) {
+            accum.sum_f32[j] += x[j];
+        }
+        for (size_t r = 0; r < d; ++r) {
+            for (size_t c = 0; c < d; ++c) {
+                accum.outer_f32[r*d + c] += x[r] * x[c];
+            }
+        }
+    } else {
+        for (size_t j = 0; j < d; ++j) {
+            accum.sum_f64[j] += (double) x[j];
+        }
+        for (size_t r = 0; r < d; ++r) {
+            for (size_t c = 0; c < d; ++c) {
+                accum.outer_f64[r*d + c] += (double) x[r] * (double) x[c];
+            }
+        }
     }
 }
 
@@ -235,6 +589,10 @@ bool IMatrixCollector::collect_imatrix(struct ggml_tensor * t, bool ask, void * 
 
     const int32_t chunk_size = m_params.n_ctx / m_params.n_parallel;
 
+    if (m_params.moe_trace_cov && !m_cov_filters_ready) {
+        ensure_cov_filters_initialized();
+    }
+
     // when ask is true, the scheduler wants to know if we are interested in data from this tensor
     // if we return true, a follow-up call will be made with ask=false in which we can do the actual collection
     if (ask) {
@@ -307,6 +665,12 @@ bool IMatrixCollector::collect_imatrix(struct ggml_tensor * t, bool ask, void * 
         for (int64_t ex = 0; ex < n_as; ++ex) {
             size_t e_start = ex*src1->ne[0];
 
+            moe_cov_target_key cov_key;
+            bool collect_cov_ex = false;
+            if (m_params.moe_trace_cov) {
+                resolve_moe_cov_target(src0, (int32_t) src1->ne[0], (int32_t) ex, cov_key, collect_cov_ex);
+            }
+
             for (int64_t idx = 0; idx < n_ids; ++idx) {
                 for (int64_t row = 0; row < src1->ne[2]; ++row) {
                     const int excur = *(const int32_t *) (m_ids.data() + row*ids->nb[1] + idx*ids->nb[0]);
@@ -318,6 +682,12 @@ bool IMatrixCollector::collect_imatrix(struct ggml_tensor * t, bool ask, void * 
                     const int64_t i11 = idx % src1->ne[1];
                     const int64_t i12 = row;
                     const float * x = (const float *)(data + i11*src1->nb[1] + i12*src1->nb[2]);
+
+                    if (collect_cov_ex) {
+                        auto & accum = m_cov_stats[cov_key];
+                        ensure_cov_accum_capacity(accum, (int32_t) src1->ne[0]);
+                        cov_update_accum(accum, x, (int32_t) src1->ne[0]);
+                    }
 
                     e.counts[ex]++;
 
@@ -622,6 +992,59 @@ void IMatrixCollector::save_imatrix(int32_t n_chunk) const {
 
     gguf_free(ctx_gguf);
     ggml_free(ctx);
+}
+
+bool IMatrixCollector::save_moe_covariance(const llama_model * model, std::string & error_msg) const {
+    if (!m_params.moe_trace_cov) {
+        return true;
+    }
+
+    std::vector<std::pair<moe_cov_target_key, const moe_cov_accum *>> ordered;
+    ordered.reserve(m_cov_stats.size());
+    for (const auto & kv : m_cov_stats) {
+        ordered.emplace_back(kv.first, &kv.second);
+    }
+
+    std::sort(ordered.begin(), ordered.end(), [](const auto & a, const auto & b) {
+        if (a.first.layer != b.first.layer) return a.first.layer < b.first.layer;
+        if (a.first.expert != b.first.expert) return a.first.expert < b.first.expert;
+        if (a.first.role != b.first.role) return a.first.role < b.first.role;
+        return a.first.tensor_name < b.first.tensor_name;
+    });
+
+    std::vector<moe_cov_target_data> targets;
+    targets.reserve(ordered.size());
+
+    for (const auto & item : ordered) {
+        const auto & key = item.first;
+        const auto & accum = *item.second;
+
+        if (key.layer < 0 || key.expert < 0) {
+            continue;
+        }
+
+        moe_cov_target_data target;
+        target.layer = (uint32_t) key.layer;
+        target.expert = (uint32_t) key.expert;
+        target.dim = (uint32_t) key.dim;
+        target.n = accum.n;
+        target.role = key.role;
+        target.role_variant = key.role_variant;
+        target.tensor_name = key.tensor_name;
+
+        target.sum_f8 = accum.sum_f8;
+        target.outer_f8 = accum.outer_f8;
+        target.sum_f16 = accum.sum_f16;
+        target.outer_f16 = accum.outer_f16;
+        target.sum_f32 = accum.sum_f32;
+        target.outer_f32 = accum.outer_f32;
+        target.sum_f64 = accum.sum_f64;
+        target.outer_f64 = accum.outer_f64;
+
+        targets.push_back(std::move(target));
+    }
+
+    return moe_cov_write_file(m_params, model, targets, error_msg);
 }
 
 bool IMatrixCollector::load_imatrix_legacy(const char * fname) {
@@ -1225,6 +1648,10 @@ int main(int argc, char ** argv) {
         return 0;
     }
 
+    if (params.moe_trace_cov && params.cov_precision == IMATRIX_COV_F8) {
+        LOG_WRN("%s: covariance precision f8 is memory-efficient but numerically fragile\n", __func__);
+    }
+
     const int32_t n_ctx = params.n_ctx;
 
     if (n_ctx <= 0) {
@@ -1308,6 +1735,15 @@ int main(int argc, char ** argv) {
     }
 
     g_collector.save_imatrix();
+
+    if (params.moe_trace_cov) {
+        std::string cov_error;
+        if (!g_collector.save_moe_covariance(model, cov_error)) {
+            LOG_ERR("%s: failed to write covariance file: %s\n", __func__, cov_error.c_str());
+            return 1;
+        }
+        LOG_INF("%s: wrote covariance stats to '%s'\n", __func__, params.cov_out_file.c_str());
+    }
 
     LOG("\n");
     llama_perf_context_print(ctx);

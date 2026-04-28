@@ -6,6 +6,8 @@
 #include <vector>
 #include <sstream>
 #include <unordered_set>
+#include <filesystem>
+#include <fstream>
 
 #undef NDEBUG
 #include <cassert>
@@ -140,6 +142,81 @@ int main(void) {
     assert(params.lora_adapters[1].path == "file2,2.gguf");
     assert(params.lora_adapters[2].path == "file3\"3\".gguf");
     assert(params.lora_adapters[3].path == "file4\".gguf");
+
+    printf("test-arg-parser: test covariance argument validation\n\n");
+
+    // covariance options require --moe-trace-cov
+    argv = {"binary_name", "--moe-trace-cov-precision", "f16"};
+    assert(false == common_params_parse(argv.size(), list_str_to_char(argv).data(), params, LLAMA_EXAMPLE_IMATRIX));
+
+    // --moe-trace-cov requires explicit output file
+    argv = {"binary_name", "--moe-trace-cov"};
+    assert(false == common_params_parse(argv.size(), list_str_to_char(argv).data(), params, LLAMA_EXAMPLE_IMATRIX));
+
+    // invalid target list should fail (empty item)
+    argv = {
+        "binary_name", "--moe-trace-cov", "--moe-trace-cov-out", "cov.gguf",
+        "--moe-trace-cov-targets", "gate,"
+    };
+    assert(false == common_params_parse(argv.size(), list_str_to_char(argv).data(), params, LLAMA_EXAMPLE_IMATRIX));
+
+    // invalid layer filter syntax should fail
+    argv = {
+        "binary_name", "--moe-trace-cov", "--moe-trace-cov-out", "cov.gguf",
+        "--moe-trace-cov-layers", "1--2"
+    };
+    assert(false == common_params_parse(argv.size(), list_str_to_char(argv).data(), params, LLAMA_EXAMPLE_IMATRIX));
+
+    // append mode requires existing file
+    argv = {
+        "binary_name", "--moe-trace-cov", "--moe-trace-cov-out", "definitely-missing-cov.gguf",
+        "--moe-trace-cov-file-mode", "append"
+    };
+    assert(false == common_params_parse(argv.size(), list_str_to_char(argv).data(), params, LLAMA_EXAMPLE_IMATRIX));
+
+    // valid covariance config with precision + filters + targets
+    argv = {
+        "binary_name", "--moe-trace-cov", "--moe-trace-cov-out", "cov.gguf",
+        "--moe-trace-cov-precision", "f64",
+        "--moe-trace-cov-layers", "0,2,4-7",
+        "--moe-trace-cov-experts", "0-3,8",
+        "--moe-trace-cov-targets", "gate,down"
+    };
+    assert(true == common_params_parse(argv.size(), list_str_to_char(argv).data(), params, LLAMA_EXAMPLE_IMATRIX));
+    assert(params.moe_trace_cov == true);
+    assert(params.cov_precision == IMATRIX_COV_F64);
+    assert(params.cov_out_file == "cov.gguf");
+    assert(params.cov_layers == "0,2,4-7");
+    assert(params.cov_experts == "0-3,8");
+    assert(params.cov_targets == "gate,down");
+
+    // valid append mode when target file exists
+    {
+        namespace fs = std::filesystem;
+        const fs::path temp_cov_path = fs::temp_directory_path() / "llama-test-moe-cov-append.gguf";
+
+        {
+            std::ofstream f(temp_cov_path, std::ios::binary | std::ios::trunc);
+            assert((bool) f);
+            f.put('\0');
+        }
+
+        argv = {
+            "binary_name", "--moe-trace-cov", "--moe-trace-cov-out", temp_cov_path.string(),
+            "--moe-trace-cov-file-mode", "append",
+            "--moe-trace-cov-precision", "f16",
+            "--moe-trace-cov-targets", "all"
+        };
+        assert(true == common_params_parse(argv.size(), list_str_to_char(argv).data(), params, LLAMA_EXAMPLE_IMATRIX));
+        assert(params.cov_file_mode == IMATRIX_COV_APPEND_MERGE);
+        assert(params.cov_precision == IMATRIX_COV_F16);
+        assert(params.cov_targets == "all");
+
+        std::error_code ec;
+        fs::remove(temp_cov_path, ec);
+    }
+
+    params = common_params();
 
 // skip this part on windows, because setenv is not supported
 #ifdef _WIN32

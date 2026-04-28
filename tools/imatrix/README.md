@@ -10,6 +10,9 @@ More information is available in <https://github.com/ggml-org/llama.cpp/pull/486
     -m model.gguf -f some-text.txt [-o imatrix.gguf] [--output-format {gguf,dat}] [--no-ppl] \
     [--process-output] [--chunk 123] [--save-frequency 0] [--output-frequency 10] \
     [--in-file imatrix-prev-0.gguf --in-file imatrix-prev-1.gguf ...] [--parse-special] \
+    [--moe-trace-cov --moe-trace-cov-out moe-cov.gguf \
+     --moe-trace-cov-precision {f8,f16,f32,f64} --moe-trace-cov-file-mode {create,append,overwrite} \
+     --moe-trace-cov-layers SPEC --moe-trace-cov-experts SPEC --moe-trace-cov-targets SPEC] \
     [--show-statistics] [...]
 ```
 
@@ -25,6 +28,13 @@ The parameters in square brackets are optional and have the following meaning:
 * `--process-output` specifies if data will be collected for the `output.weight` tensor. Typically, it is better not to utilize the importance matrix when quantizing `output.weight`, so this is set to `false` by default.
 * `--in-file` one or more existing imatrix files to load and combine. Useful for merging files from multiple runs/datasets.
 * `--parse-special` enables parsing of special tokens (e.g., `<|im_start|>` in some models). Useful for models with custom tokenizers.
+* `--moe-trace-cov` enables MoE expert FFN covariance tracing output.
+* `--moe-trace-cov-precision` selects covariance accumulation/storage precision (`f8`, `f16`, `f32`, `f64`). Default is `f8`.
+* `--moe-trace-cov-out` specifies the dedicated covariance output GGUF file (required with `--moe-trace-cov`).
+* `--moe-trace-cov-file-mode` controls covariance output behavior: `create` (fail if exists), `overwrite` (replace existing), `append` (load existing covariance GGUF, merge by target, and atomically rewrite).
+* `--moe-trace-cov-layers` optional layer filter expression (e.g. `0,1,8-15`) to scope covariance collection.
+* `--moe-trace-cov-experts` optional expert filter expression (e.g. `0-3,7`) to scope covariance collection.
+* `--moe-trace-cov-targets` target roles (`all`, `gate`, `up`, `down`, or comma-separated combinations excluding `all`).
 * `--chunk | --from-chunk` to skip the first `n` chunks of tokens from the input data. Useful for resuming or skipping initial low-quality data.
 * `--chunks` maximum number of chunks to process. Default is -1 for all available chunks.
 * `--no-ppl` disables the calculation of perplexity for the processed chunks. Useful if you want to speed up the processing and do not care about perplexity.
@@ -33,6 +43,23 @@ The parameters in square brackets are optional and have the following meaning:
 For faster computation, make sure to use GPU offloading via the `-ngl | --n-gpu-layers` argument.
 
 Recent versions of `llama-imatrix` store data in GGUF format by default. For the legacy format, use an extension other than `.gguf` when saving the output file. More information is available in <https://github.com/ggml-org/llama.cpp/pull/9400>.
+
+## MoE covariance tracing (phase 4 hardening)
+
+Phase 3 includes expert-role-aware collection (`gate`/`up`/`down`) and append/merge rewrite support while writing per-target sufficient statistics plus derived population covariance. Current behavior:
+
+- The regular imatrix output (`--output-file`) is unchanged.
+- When `--moe-trace-cov` is enabled, `--moe-trace-cov-out` is required.
+- `create`, `overwrite`, and `append` modes are supported.
+- `append` validates schema (`general.type`, version, convention, precision) and model fingerprint, merges matching targets by `n/sum/outer`, preserves non-overlapping targets, and atomically rewrites the output file.
+- The covariance output file uses `general.type = "moe_covariance"` and writes top-level metadata and per-target metadata.
+- Per target, the file includes `n`, `sum`, `outer`, and derived `cov_pop` tensors.
+- Derived covariance is population covariance (`cov_pop = (outer / n) - (sum / n)(sum / n)^T`) with low-count behavior:
+  - `n = 0` -> zero covariance tensor
+  - `n = 1` -> zero covariance tensor
+- Append mode rejects incompatible files (schema/version/convention/precision/model fingerprint mismatch) before merge.
+
+The default covariance precision (`f8`) is memory-efficient but numerically fragile for long-running accumulations; runtime warns once when `f8` is selected. Prefer `f16+` for fidelity-sensitive workflows.
 
 ## Examples
 
@@ -72,6 +99,26 @@ Recent versions of `llama-imatrix` store data in GGUF format by default. For the
 ```bash
 # analyse imatrix file and display summary statistics instead of running inference
 ./llama-imatrix --in-file imatrix.gguf --show-statistics
+```
+
+```bash
+# write covariance stats output alongside imatrix output
+./llama-imatrix -m ggml-model-f16.gguf -f calibration-data.txt \
+  --moe-trace-cov --moe-trace-cov-out moe-cov.gguf \
+  --moe-trace-cov-file-mode create --moe-trace-cov-precision f16
+```
+
+```bash
+# incremental subset capture (Qwen/SwiGLU-style MoE workflows)
+./llama-imatrix -m ggml-model-f16.gguf -f calibration-a.txt \
+  --moe-trace-cov --moe-trace-cov-out moe-cov.gguf \
+  --moe-trace-cov-file-mode create \
+  --moe-trace-cov-layers 0-7 --moe-trace-cov-experts 0-3 --moe-trace-cov-targets gate,up
+
+./llama-imatrix -m ggml-model-f16.gguf -f calibration-b.txt \
+  --moe-trace-cov --moe-trace-cov-out moe-cov.gguf \
+  --moe-trace-cov-file-mode append \
+  --moe-trace-cov-layers 8-15 --moe-trace-cov-experts 0-3 --moe-trace-cov-targets down
 ```
 
 `--show-statistics` will display the following statistics:
