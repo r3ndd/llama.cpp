@@ -1,0 +1,40 @@
+{"id":"coding-python-refactor","prompt":"Refactor this Python function for readability and explain each change: `def f(x):return [i*i for i in x if i%2==0]`.","temperature":0.2,"top_p":0.95,"max_tokens":220,"seed":101}
+{"id":"coding-cpp-bugfix","prompt":"A C++ function occasionally crashes when accessing `vec[i+1]` in a loop. Propose a safe fix and explain edge cases.","temperature":0.2,"top_p":0.9,"max_tokens":220,"seed":102}
+{"id":"coding-sql-index","prompt":"Given a table with columns `(user_id, created_at, status)`, suggest indexing strategy for frequent queries filtering by user and date range.","temperature":0.3,"top_p":0.9,"max_tokens":220,"seed":103}
+{"id":"coding-api-design","prompt":"Design a REST API for managing project tasks with pagination, filtering, and optimistic concurrency control.","temperature":0.4,"top_p":0.9,"max_tokens":260,"seed":104}
+{"id":"science-physics-entropy","prompt":"Explain entropy intuitively for high-school students, then give one everyday example and one engineering example.","temperature":0.5,"top_p":0.92,"max_tokens":260,"seed":105}
+{"id":"science-biology-crispr","prompt":"Summarize how CRISPR-Cas9 edits genes, including one therapeutic use and one ethical concern.","temperature":0.4,"top_p":0.9,"max_tokens":260,"seed":106}
+{"id":"science-climate-feedback","prompt":"What are climate feedback loops? Compare albedo feedback and water-vapor feedback in simple terms.","temperature":0.4,"top_p":0.92,"max_tokens":260,"seed":107}
+{"id":"science-chemistry-catalyst","prompt":"Why do catalysts speed up reactions without being consumed? Include activation energy in your explanation.","temperature":0.4,"top_p":0.9,"max_tokens":240,"seed":108}
+{"id":"math-calculus-chainrule","prompt":"Compute the derivative of `sin(x^2) * e^(3x)` and show each rule used.","temperature":0.2,"top_p":0.9,"max_tokens":200,"seed":109}
+{"id":"math-linear-algebra-eigen","prompt":"Give an intuitive explanation of eigenvectors and eigenvalues with a 2D geometric example.","temperature":0.4,"top_p":0.92,"max_tokens":240,"seed":110}
+{"id":"math-probability-bayes","prompt":"A test has 98% sensitivity, 95% specificity, and disease prevalence 1%. Estimate post-test probability after a positive result.","temperature":0.2,"top_p":0.9,"max_tokens":220,"seed":111}
+{"id":"math-discrete-complexity","prompt":"Compare O(n log n), O(n^2), and O(2^n) with practical algorithm examples.","temperature":0.3,"top_p":0.9,"max_tokens":220,"seed":112}
+{"id":"creative-short-story-space","prompt":"Write a short story opening (180-220 words) about an archivist discovering a forgotten map on a generation ship.","temperature":0.9,"top_p":0.95,"max_tokens":320,"seed":113}
+{"id":"creative-poem-rain","prompt":"Write a 14-line poem about rain in a city at dawn, with vivid sensory imagery.","temperature":0.9,"top_p":0.95,"max_tokens":280,"seed":114}
+{"id":"creative-dialogue","prompt":"Create a dialogue between a skeptical engineer and an optimistic artist planning a public installation.","temperature":0.8,"top_p":0.95,"max_tokens":280,"seed":115}
+{"id":"creative-worldbuilding","prompt":"Invent a small fantasy town economy based on bioluminescent fungi; include trade, hazards, and social norms.","temperature":0.85,"top_p":0.95,"max_tokens":320,"seed":116}
+{"id":"history-rome-republic","prompt":"What were the key institutional differences between the Roman Republic and the early Roman Empire?","temperature":0.3,"top_p":0.9,"max_tokens":250,"seed":117}
+{"id":"history-industrial-revolution","prompt":"Describe three major social impacts of the Industrial Revolution in 19th-century Britain.","temperature":0.3,"top_p":0.9,"max_tokens":240,"seed":118}
+{"id":"history-silk-road","prompt":"Explain how the Silk Road influenced cultural exchange beyond just trade goods.","temperature":0.4,"top_p":0.92,"max_tokens":240,"seed":119}
+{"id":"history-cold-war","prompt":"Give a concise timeline of key Cold War events from 1947 to 1991 with one-line significance notes.","temperature":0.3,"top_p":0.9,"max_tokens":300,"seed":120}
+{"id":"business-go-to-market","prompt":"Create a lightweight go-to-market plan for a B2B SaaS startup launching an AI meeting-notes product.","temperature":0.5,"top_p":0.92,"max_tokens":300,"seed":121}
+{"id":"business-pricing","prompt":"Compare usage-based, seat-based, and hybrid pricing for developer tools. When is each best?","temperature":0.4,"top_p":0.92,"max_tokens":260,"seed":122}
+{"id":"business-financial-model","prompt":"Outline a simple 12-month financial model structure for an e-commerce startup (revenue, COGS, CAC, churn).","temperature":0.4,"top_p":0.9,"max_tokens":260,"seed":123}
+{"id":"business-risk-register","prompt":"Draft a risk register with mitigation strategies for a company migrating critical services to cloud infrastructure.","temperature":0.4,"top_p":0.9,"max_tokens":280,"seed":124}
+{"id":"medicine-public-health","prompt":"Explain herd immunity and why vaccine coverage thresholds vary by disease.","temperature":0.3,"top_p":0.9,"max_tokens":230,"seed":125}
+{"id":"medicine-clinical-trial","prompt":"Describe phases I-IV of clinical trials and the primary goal of each phase.","temperature":0.3,"top_p":0.9,"max_tokens":230,"seed":126}
+{"id":"medicine-nutrition","prompt":"Compare soluble and insoluble fiber, including health effects and food examples.","temperature":0.4,"top_p":0.92,"max_tokens":220,"seed":127}
+{"id":"medicine-neuroscience","prompt":"What is neuroplasticity, and how does practice shape neural pathways over time?","temperature":0.4,"top_p":0.9,"max_tokens":230,"seed":128}
+{"id":"law-policy-gdpr","prompt":"Summarize core GDPR principles and practical implications for a small web app collecting user analytics.","temperature":0.3,"top_p":0.9,"max_tokens":260,"seed":129}
+{"id":"law-policy-ai-governance","prompt":"Propose a basic internal AI governance policy for a mid-size company using LLMs in customer support.","temperature":0.4,"top_p":0.92,"max_tokens":280,"seed":130}
+{"id":"education-lesson-plan","prompt":"Create a 45-minute lesson plan to teach fractions to 5th graders, with one hands-on activity and an exit ticket.","temperature":0.5,"top_p":0.92,"max_tokens":280,"seed":131}
+{"id":"education-assessment-rubric","prompt":"Design a concise rubric for evaluating student presentations on scientific topics.","temperature":0.4,"top_p":0.9,"max_tokens":240,"seed":132}
+{"id":"philosophy-ethics-trolley","prompt":"Compare utilitarian and deontological responses to the trolley problem in clear language.","temperature":0.5,"top_p":0.92,"max_tokens":240,"seed":133}
+{"id":"philosophy-mind-consciousness","prompt":"Present three major theories of consciousness and one criticism of each.","temperature":0.5,"top_p":0.92,"max_tokens":260,"seed":134}
+{"id":"geography-urbanization","prompt":"Explain drivers of rapid urbanization in developing regions and two resulting infrastructure challenges.","temperature":0.4,"top_p":0.9,"max_tokens":240,"seed":135}
+{"id":"geography-water-security","prompt":"Discuss causes of water stress and practical adaptation strategies for drought-prone cities.","temperature":0.4,"top_p":0.92,"max_tokens":250,"seed":136}
+{"id":"engineering-systems-design","prompt":"Sketch a fault-tolerant architecture for a real-time telemetry pipeline with ingestion, processing, and storage layers.","temperature":0.4,"top_p":0.9,"max_tokens":300,"seed":137}
+{"id":"engineering-tradeoffs","prompt":"How do you evaluate tradeoffs between latency, consistency, and cost in distributed systems? Give a concrete scenario.","temperature":0.4,"top_p":0.9,"max_tokens":280,"seed":138}
+{"id":"economics-inflation","prompt":"Describe demand-pull vs cost-push inflation and how central banks may respond to each.","temperature":0.3,"top_p":0.9,"max_tokens":240,"seed":139}
+{"id":"economics-labor-market","prompt":"Explain how automation can both displace and create jobs, with short-term and long-term effects.","temperature":0.4,"top_p":0.92,"max_tokens":250,"seed":140}
