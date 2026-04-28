@@ -23,9 +23,11 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <cctype>
 #include <cinttypes>
 #include <climits>
 #include <cstdarg>
+#include <filesystem>
 #include <fstream>
 #include <list>
 #include <regex>
@@ -416,6 +418,53 @@ static bool parse_bool_value(const std::string & value) {
     }
 }
 
+static void validate_index_filter_spec(const std::string & spec, const char * flag_name) {
+    if (spec.empty()) {
+        return;
+    }
+
+    for (auto entry : string_split<std::string>(spec, ',')) {
+        entry = string_strip(entry);
+        if (entry.empty()) {
+            throw std::invalid_argument(string_format("error: invalid empty item in %s\n", flag_name));
+        }
+
+        const auto dash = entry.find('-');
+        if (dash == std::string::npos) {
+            for (char ch : entry) {
+                if (!std::isdigit((unsigned char) ch)) {
+                    throw std::invalid_argument(string_format("error: invalid value '%s' in %s\n", entry.c_str(), flag_name));
+                }
+            }
+            continue;
+        }
+
+        if (dash == 0 || dash + 1 >= entry.size() || entry.find('-', dash + 1) != std::string::npos) {
+            throw std::invalid_argument(string_format("error: invalid range '%s' in %s\n", entry.c_str(), flag_name));
+        }
+
+        const std::string first = entry.substr(0, dash);
+        const std::string second = entry.substr(dash + 1);
+
+        for (char ch : first) {
+            if (!std::isdigit((unsigned char) ch)) {
+                throw std::invalid_argument(string_format("error: invalid range '%s' in %s\n", entry.c_str(), flag_name));
+            }
+        }
+        for (char ch : second) {
+            if (!std::isdigit((unsigned char) ch)) {
+                throw std::invalid_argument(string_format("error: invalid range '%s' in %s\n", entry.c_str(), flag_name));
+            }
+        }
+
+        const int64_t range_start = std::stoll(first);
+        const int64_t range_end = std::stoll(second);
+        if (range_end < range_start) {
+            throw std::invalid_argument(string_format("error: invalid descending range '%s' in %s\n", entry.c_str(), flag_name));
+        }
+    }
+}
+
 //
 // CLI argument parsing functions
 //
@@ -569,6 +618,57 @@ static bool common_params_parse_ex(int argc, char ** argv, common_params_context
 
     if (params.prompt_cache_all && (params.interactive || params.interactive_first)) {
         throw std::invalid_argument("error: --prompt-cache-all not supported in interactive mode yet\n");
+    }
+
+    {
+        const bool has_cov_overrides =
+            params.cov_precision != IMATRIX_COV_F8 ||
+            !params.cov_out_file.empty() ||
+            params.cov_file_mode != IMATRIX_COV_CREATE ||
+            !params.cov_layers.empty() ||
+            !params.cov_experts.empty() ||
+            params.cov_targets != "all";
+
+        if (params.moe_trace_cov && params.cov_out_file.empty()) {
+            throw std::invalid_argument("error: --moe-trace-cov requires --moe-trace-cov-out\n");
+        }
+
+        if (!params.moe_trace_cov && has_cov_overrides) {
+            throw std::invalid_argument("error: covariance options require --moe-trace-cov\n");
+        }
+
+        if (params.moe_trace_cov) {
+            if (params.cov_file_mode == IMATRIX_COV_APPEND_MERGE && !std::filesystem::exists(params.cov_out_file)) {
+                throw std::invalid_argument(string_format(
+                    "error: covariance append mode requires an existing file: '%s'\n",
+                    params.cov_out_file.c_str()));
+            }
+
+            validate_index_filter_spec(params.cov_layers, "--moe-trace-cov-layers");
+            validate_index_filter_spec(params.cov_experts, "--moe-trace-cov-experts");
+
+            std::set<std::string> targets;
+            for (auto target : string_split<std::string>(params.cov_targets, ',')) {
+                target = string_strip(target);
+                if (target.empty()) {
+                    throw std::invalid_argument("error: invalid empty item in --moe-trace-cov-targets\n");
+                }
+
+                if (target != "all" && target != "gate" && target != "up" && target != "down") {
+                    throw std::invalid_argument(string_format("error: invalid covariance target '%s'\n", target.c_str()));
+                }
+
+                targets.insert(target);
+            }
+
+            if (targets.empty()) {
+                throw std::invalid_argument("error: --moe-trace-cov-targets must not be empty\n");
+            }
+
+            if (targets.count("all") && targets.size() > 1) {
+                throw std::invalid_argument("error: --moe-trace-cov-targets cannot combine 'all' with specific targets\n");
+            }
+        }
     }
 
     // handle model and download
@@ -2735,6 +2835,62 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
         string_format("parse special tokens (chat, tool, etc) (default: %s)", params.parse_special ? "true" : "false"),
         [](common_params & params) {
             params.parse_special = true;
+        }
+    ).set_examples({LLAMA_EXAMPLE_IMATRIX}));
+    add_opt(common_arg(
+        {"--moe-trace-cov"},
+        string_format("enable MoE expert covariance tracing (default: %s)", params.moe_trace_cov ? "true" : "false"),
+        [](common_params & params) {
+            params.moe_trace_cov = true;
+        }
+    ).set_examples({LLAMA_EXAMPLE_IMATRIX}));
+    add_opt(common_arg(
+        {"--moe-trace-cov-precision"}, "{f8,f16,f32,f64}",
+        "covariance accumulation/storage precision",
+        [](common_params & params, const std::string & value) {
+            /**/ if (value == "f8")  { params.cov_precision = IMATRIX_COV_F8; }
+            else if (value == "f16") { params.cov_precision = IMATRIX_COV_F16; }
+            else if (value == "f32") { params.cov_precision = IMATRIX_COV_F32; }
+            else if (value == "f64") { params.cov_precision = IMATRIX_COV_F64; }
+            else { throw std::invalid_argument("invalid covariance precision"); }
+        }
+    ).set_examples({LLAMA_EXAMPLE_IMATRIX}));
+    add_opt(common_arg(
+        {"--moe-trace-cov-out"}, "FNAME",
+        string_format("covariance output file (default: '%s')", params.cov_out_file.c_str()),
+        [](common_params & params, const std::string & value) {
+            params.cov_out_file = value;
+        }
+    ).set_examples({LLAMA_EXAMPLE_IMATRIX}));
+    add_opt(common_arg(
+        {"--moe-trace-cov-file-mode"}, "{create,append,overwrite}",
+        "covariance file write mode",
+        [](common_params & params, const std::string & value) {
+            /**/ if (value == "create")    { params.cov_file_mode = IMATRIX_COV_CREATE; }
+            else if (value == "append")    { params.cov_file_mode = IMATRIX_COV_APPEND_MERGE; }
+            else if (value == "overwrite") { params.cov_file_mode = IMATRIX_COV_OVERWRITE; }
+            else { throw std::invalid_argument("invalid covariance file mode"); }
+        }
+    ).set_examples({LLAMA_EXAMPLE_IMATRIX}));
+    add_opt(common_arg(
+        {"--moe-trace-cov-layers"}, "SPEC",
+        "layer filter for covariance collection (e.g. 0,2,4-7)",
+        [](common_params & params, const std::string & value) {
+            params.cov_layers = value;
+        }
+    ).set_examples({LLAMA_EXAMPLE_IMATRIX}));
+    add_opt(common_arg(
+        {"--moe-trace-cov-experts"}, "SPEC",
+        "expert filter for covariance collection (e.g. 0-3,7)",
+        [](common_params & params, const std::string & value) {
+            params.cov_experts = value;
+        }
+    ).set_examples({LLAMA_EXAMPLE_IMATRIX}));
+    add_opt(common_arg(
+        {"--moe-trace-cov-targets"}, "SPEC",
+        string_format("covariance target roles (default: %s)", params.cov_targets.c_str()),
+        [](common_params & params, const std::string & value) {
+            params.cov_targets = value;
         }
     ).set_examples({LLAMA_EXAMPLE_IMATRIX}));
     add_opt(common_arg(

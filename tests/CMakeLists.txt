@@ -231,6 +231,9 @@ llama_build_and_test(test-thread-safety.cpp ARGS -m "${MODEL_DEST}" -ngl 99 -p "
 set_tests_properties(test-thread-safety PROPERTIES FIXTURES_REQUIRED test-download-model)
 
 llama_build_and_test(test-arg-parser.cpp)
+llama_build(test-moe-cov-io.cpp ../tools/imatrix/moe-cov-io.cpp)
+target_link_libraries(test-moe-cov-io PRIVATE llama)
+llama_test(test-moe-cov-io)
 
 if (NOT LLAMA_SANITIZE_ADDRESS AND NOT GGML_SCHED_NO_REALLOC)
   # TODO: repair known memory leaks
