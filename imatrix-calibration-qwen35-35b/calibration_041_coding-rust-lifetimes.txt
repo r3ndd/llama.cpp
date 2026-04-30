@@ -1,0 +1,65 @@
+The Rust function in question has a lifetime issue:
+
+```rust
+fn pick<'a>(a: &'a str, b: &str) -> &'a str {
+    if a.len() > b.len() {
+        a
+    } else {
+        b
+    }
+}
+```
+
+### Why This Fails
+
+The function declares that the returned reference has lifetime `'a`, tied to parameter `a`. However, parameter `b` has an anonymous (shorter) lifetime. When the function returns `b`, it returns a reference that may not live as long as `'a`, violating the return type's lifetime contract.
+
+The Rust compiler rejects this because it can't guarantee that the returned reference will outlive `'a`. This is a violation of Rust's borrow checker rules, which ensure memory safety by tracking lifetimes precisely.
+
+### Corrected Version
+
+To fix this, both input references must share the same lifetime `'a`. Here's the corrected version:
+
+```rust
+fn pick<'a>(a: &'a str, b: &'a str) -> &'a str {
+    if a.len() > b.len() {
+        a
+    } else {
+        b
+    }
+}
+```
+
+Now, both `a` and `b` are guaranteed to live at least as long as `'a`. Therefore, whichever one is returned will satisfy the return type's lifetime constraint.
+
+### Demonstration
+
+```rust
+fn main() {
+    let s1 = String::from("hello");
+    let s2 = String::from("world");
+
+    let result = pick(&s1, &s2);
+    println!("{}", result); // OK: both references live long enough
+}
+```
+
+### Alternative Fix: Separate Lifetimes (Not Recommended)
+
+You might consider:
+
+```rust
+fn pick<'a, 'b>(a: &'a str, b: &'b str) -> &'a str {
+    if a.len() > b.len() {
+        a
+    } else {
+        b
+    }
+}
+```
+
+But this will still fail to compile because returning `b` (with lifetime `'b`) doesn't satisfy the return type `&'a str` unless `'b: 'a`. This is rarely the correct design for this function.
+
+### Key Takeaway
+
+In Rust, when a function can return one of multiple references, all those references must share the same lifetime or be constrained such that they outlive the return type's lifetime. This ensures memory safety and prevents dangling references.

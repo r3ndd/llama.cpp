@@ -22,6 +22,7 @@ PASS_THROUGH_FIELDS = {
     "min_p",
     "top_k",
     "repeat_penalty",
+    "repetition_penalty",
 }
 
 
@@ -134,7 +135,7 @@ def parse_generated_text(response_json: dict[str, Any]) -> str:
 
     content = message.get("content", "")
 
-    if isinstance(content, str):
+    if isinstance(content, str) and content.strip():
         return content
 
     if isinstance(content, list):
@@ -142,7 +143,15 @@ def parse_generated_text(response_json: dict[str, Any]) -> str:
         for item in content:
             if isinstance(item, dict) and item.get("type") == "text" and isinstance(item.get("text"), str):
                 text_chunks.append(item["text"])
-        return "".join(text_chunks)
+        joined = "".join(text_chunks)
+        if joined.strip():
+            return joined
+
+    # Some reasoning-capable chat models return generated text in
+    # message.reasoning_content with empty message.content.
+    reasoning_content = message.get("reasoning_content")
+    if isinstance(reasoning_content, str):
+        return reasoning_content
 
     return ""
 

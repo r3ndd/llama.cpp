@@ -1,0 +1,137 @@
+Here's a safe and robust Bash script pattern that demonstrates best practices for handling files with spaces, strict error handling, and cleanup traps:
+
+```bash
+#!/usr/bin/env bash
+#
+# safe_file_processor.sh
+# Processes files safely with error handling and cleanup
+#
+
+set -euo pipefail  # Exit on error, undefined var, pipe failure
+IFS=$'\n\t'        # Prevent word splitting on newlines/tabs
+
+# --- Configuration ---
+readonly SCRIPT_NAME="$(basename "$0")"
+readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+readonly TEMP_DIR="${TMPDIR:-/tmp}/${SCRIPT_NAME}.$$_$(date +%s)"
+readonly LOG_FILE="${TEMP_DIR}/script.log"
+
+# --- Error Handling Functions ---
+log_error() {
+    echo "[ERROR] $*" >&2
+}
+
+log_info() {
+    echo "[INFO] $*" >> "$LOG_FILE"
+}
+
+cleanup() {
+    local exit_code=$?
+    log_info "Cleanup started. Exit code: $exit_code"
+    if [[ -d "$TEMP_DIR" ]]; then
+        rm -rf "$TEMP_DIR"
+        log_info "Temporary directory removed: $TEMP_DIR"
+    fi
+    exit "$exit_code"
+}
+
+trap cleanup EXIT
+trap 'log_error "Script interrupted"; exit 130' INT TERM
+
+# --- Validation Functions ---
+validate_args() {
+    local count=${#1[@]}
+    if [[ $count -lt 1 ]]; then
+        log_error "Usage: $SCRIPT_NAME <directory>"
+        exit 1
+    fi
+}
+
+validate_directory() {
+    local dir="$1"
+    if [[ ! -d "$dir" ]]; then
+        log_error "Directory does not exist: $dir"
+        exit 1
+    fi
+    if [[ ! -r "$dir" ]]; then
+        log_error "Directory is not readable: $dir"
+        exit 1
+    fi
+}
+
+# --- Main Processing Function ---
+process_files() {
+    local dir="$1"
+    local file_count=0
+    local error_count=0
+
+    shopt -s nullglob dotglob  # Handle empty globs and hidden files
+
+    for file in "$dir"/*; do
+        ((file_count++)) || true
+        local basename
+        basename="$(basename "$file")"
+
+        if [[ -f "$file" ]]; then
+            log_info "Processing: $file"
+
+            # Example: copy file to temp directory
+            local dest="${TEMP_DIR}/${basename}"
+            if ! cp "$file" "$dest"; then
+                log_error "Failed to copy: $file"
+                ((error_count++)) || true
+                continue
+            fi
+
+            # Example: process content (e.g., print first line)
+            local first_line
+            if first_line="$(head -n 1 "$file" 2>/dev/null)"; then
+                log_info "First line of $file: $first_line"
+            else
+                log_error "Could not read first line from: $file"
+                ((error_count++)) || true
+            fi
+        fi
+    done
+
+    log_info "Processed $file_count files, $error_count errors"
+}
+
+# --- Script Entry Point ---
+main() {
+    validate_args "$@"
+    validate_directory "$1"
+
+    log_info "Script started at $(date)"
+    log_info "Target directory: $1"
+
+    mkdir -p "$TEMP_DIR" || {
+        log_error "Failed to create temp directory: $TEMP_DIR"
+        exit 1
+    }
+
+    process_files "$1"
+    log_info "Script completed successfully at $(date)"
+}
+
+main "$@"
+```
+
+### Key Best Practices Demonstrated
+
+- **Strict Error Handling:** `set -euo pipefail` catches errors, undefined variables, and pipeline failures.
+- **Safe Variable Quoting:** All variables are quoted to prevent word splitting and globbing issues.
+- **Cleanup Traps:** `trap cleanup EXIT` ensures temporary files are removed on exit.
+- **File Safety:** Files are checked for existence and readability before processing.
+- **Robust Globbing:** `shopt -s nullglob dotglob` handles edge cases with empty or hidden directories.
+- **Logging:** All operations are logged to a file for traceability.
+- **Signal Handling:** `trap` for `INT` and `TERM` ensures graceful interruption handling.
+
+### Usage Example
+
+```bash
+chmod +x safe_file_processor.sh
+./safe_file_processor.sh "/path/to/your/directory"
+```
+
+This pattern is suitable for production-grade Bash scripts where reliability, maintainability, and safety are essential.

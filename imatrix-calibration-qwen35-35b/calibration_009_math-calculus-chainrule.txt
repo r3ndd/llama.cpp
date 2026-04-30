@@ -1,0 +1,52 @@
+To find the derivative of the function $f(x) = \sin(x^2) \cdot e^{3x}$, we need to use a combination of three differentiation rules:
+
+1.  **The Product Rule** (because the function is a product of two terms).
+2.  **The Chain Rule** (because each term contains an inner function inside another function).
+3.  **Basic Trigonometric and Exponential Derivatives.**
+
+Let's break it down step-by-step.
+
+### Step 1: Identify $u$ and $v$ for the Product Rule
+The Product Rule states that for a function $f(x) = u \cdot v$:
+$$f'(x) = u'v + uv'$$
+
+Here, we define our two terms:
+*   $u = \sin(x^2)$
+*   $v = e^{3x}$
+
+### Step 2: Differentiate $u$ (requires Chain Rule)
+To find $u'$, we differentiate $\sin(x^2)$.
+The derivative of the outer function $\sin(\dots)$ is $\cos(\dots)$. We must then multiply by the derivative of the inner function $(x^2)$.
+
+*   Outer derivative: $\frac{d}{dx}[\sin(w)] = \cos(w)$
+*   Inner derivative: $\frac{d}{dx}[x^2] = 2x$
+
+Using the **Chain Rule**:
+$$u' = \cos(x^2) \cdot (2x) = 2x\cos(x^2)$$
+
+### Step 3: Differentiate $v$ (requires Chain Rule)
+To find $v'$, we differentiate $e^{3x}$.
+The derivative of the outer function $e^{(\dots)}$ is $e^{(\dots)}$. We must then multiply by the derivative of the inner function $(3x)$.
+
+*   Outer derivative: $\frac{d}{dx}[e^w] = e^w$
+*   Inner derivative: $\frac{d}{dx}[3x] = 3$
+
+Using the **Chain Rule**:
+$$v' = e^{3x} \cdot (3) = 3e^{3x}$$
+
+### Step 4: Apply the Product Rule
+Now, substitute $u$, $u'$, $v$, and $v'$ back into the Product Rule formula ($f'(x) = u'v + uv'$):
+
+1.  **Calculate $u'v$:**
+    $$(2x\cos(x^2)) \cdot (e^{3x})$$
+
+2.  **Calculate $uv'$:**
+    $$(\sin(x^2)) \cdot (3e^{3x})$$
+
+3.  **Add them together:**
+    $$f'(x) = 2x\cos(x^2)e^{3x} + 3e^{3x}\sin(x^2)$$
+
+### Final Answer
+We can factor out the common term $e^{3x}$ to simplify the expression:
+
+$$f'(x) = e^{3x} \left( 2x\cos(x^2) + 3\sin(x^2) \right)$$

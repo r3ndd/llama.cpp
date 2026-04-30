@@ -1,0 +1,43 @@
+Here is a lightweight Failure Mode and Effects Analysis (FMEA) for a **Home Blood Glucose Meter**. This example focuses on the most critical functions while keeping the data manageable.
+
+### 1. Risk Scoring Definitions
+To ensure clarity, we use a standardized 1–10 scale:
+*   **Severity (S):** Impact if failure occurs (1 = None/Minor; 10 = Death/Severe Harm).
+*   **Occurrence (O):** Likelihood of the failure (1 = Rare; 10 = Frequent). *(Included for context, though focus is on S & D).*
+*   **Detectability (D):** Ability to catch the error before it harms the user (1 = Certain detection; 10 = Impossible to detect).
+
+### 2. FMEA Table: Home Blood Glucose Meter
+
+| # | Function Step | Potential Failure Mode | Potential Effect of Failure | S | O | D | Risk Priority | Mitigation / Control Action |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **1** | **Calibration Algorithm** | Sensor drift causes reading to be falsely low. | User administers insulin based on low blood sugar but is actually hyperglycemic (Diabetic Ketoacidosis risk). | **9** | 3 | **5** | High | Software self-check; Periodic calibration verification during manufacturing. |
+| **2** | **Battery Power** | Battery voltage drops below threshold mid-test. | Device shuts off, interrupting the test. User cannot get a result. | **4** | 5 | **1** | Low | Visual "Low Battery" LED warning prior to test start. Replaceable battery. |
+| **3** | **Sample Collection (Strip)** | User does not apply enough blood volume. | Device errors out ("Error" code) or provides random number. | **6** | 7 | **2** | Medium | Error "Code" prompt forces retry; Test strip visual window prevents air bubbles. |
+| **4** | **Data Storage** | Internal memory corruption of historical logs. | Doctor sees incorrect history during consultation; trend analysis fails. | **3** | 4 | **6** | Low | Cloud backup to smartphone app (redundancy); ECC memory checks. |
+| **5** | **Physical Housing** | Crack in casing exposes electronics. | Electrical shock risk or battery leakage; exposure to germs. | **7** | 2 | **4** | Medium | Drop-test certification; Insulation gaskets; IP-rated design standards. |
+
+---
+
+### 3. Risk Ranking Analysis (Based on Severity & Detectability)
+
+While the full RPN (S x O x D) is often used, this example highlights risks based strictly on the interaction between **Severity** and **Detectability**.
+
+#### 🔴 Critical Risks (High S + High D)
+*   **Item #1 (Calibration Algorithm):** This is the highest priority. A Severity of 9 means the outcome could be fatal. A Detectability of 5 means it is difficult to catch during routine use.
+    *   *Action:* Requires rigorous software validation and mandatory calibration strips before first use.
+*   **Item #4 (Data Storage):** Severity is lower, but Detectability is high (Hard to see). If the history is lost, a doctor cannot manage care properly.
+    *   *Action:* Implement redundant storage (Device + Phone App sync).
+
+#### 🟠 Moderate Risks (High S / Medium D)
+*   **Item #3 (Sample Collection):** Severity is moderate (6), but Occurrence is high (7 users often fail this). However, Detectability is very good (2 - the device tells you immediately).
+    *   *Action:* User education and clear on-screen prompts are sufficient. No hardware change needed.
+
+#### 🟢 Low Risks (Low S or High D)
+*   **Item #2 (Battery):** Severity is low, and Detectability is near perfect (LED warning allows the user to stop).
+    *   *Action:* Standard battery replacement instructions suffice.
+*   **Item #5 (Housing):** While physical safety is important, cracks are rare and easy to spot visually by the user.
+
+### 4. Conclusion for Design Team
+1.  **Immediate Focus:** The calibration algorithm (**Risk #1**) requires the most resources. Even though failures are rare, the consequence is catastrophic and it cannot be detected by the end-user simply looking at the screen.
+2.  **Secondary Focus:** Ensure physical durability testing covers the casing crack scenario to prevent shock hazards.
+3.  **Sustaining:** The battery warning system is functioning well enough that no changes are required for Risk #2.

@@ -7,6 +7,7 @@
 #include <algorithm>
 #undef NDEBUG
 #include <cassert>
+#include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -107,6 +108,15 @@ static std::vector<float> tensor_f32_data(const ggml_context * data_ctx, const s
     assert((size_t) ggml_nelements(t) == n);
     const float * p = (const float *) t->data;
     return std::vector<float>(p, p + n);
+}
+
+static bool any_abs_gt(const std::vector<float> & v, float eps) {
+    for (const float x : v) {
+        if (std::fabs(x) > eps) {
+            return true;
+        }
+    }
+    return false;
 }
 
 static std::string find_target_id(
@@ -281,6 +291,52 @@ int main() {
         const std::vector<moe_cov_target_data> no_targets;
         assert(!moe_cov_write_file(bad_append_params, nullptr, no_targets, error_msg));
         assert(error_msg.find("precision mismatch") != std::string::npos);
+    }
+
+    // f8 accumulation should still preserve non-trivial covariance signal in cov_pop (written as f32).
+    {
+        const fs::path out_f8_path = fs::temp_directory_path() / "llama-test-moe-cov-io-f8.gguf";
+        {
+            std::error_code ec;
+            fs::remove(out_f8_path, ec);
+        }
+
+        std::string error_msg;
+        const common_params f8_params = make_cov_params(out_f8_path.string(), IMATRIX_COV_CREATE, IMATRIX_COV_F8, "source-f8.txt");
+
+        moe_cov_target_data down;
+        down.layer = 0;
+        down.expert = 0;
+        down.role = "down";
+        down.tensor_name = "blk.0.ffn_down_exps.weight";
+        down.dim = 2;
+        down.n = 136;
+        down.sum_f8 = {4, -7};
+        down.outer_f8 = {
+            4, 0,
+            0, 8,
+        };
+
+        assert(moe_cov_write_file(f8_params, nullptr, {down}, error_msg));
+
+        ggml_context * data_ctx = nullptr;
+        gguf_context * gguf_ctx = load_gguf_with_data(out_f8_path.string(), &data_ctx);
+        assert(gguf_ctx != nullptr);
+        assert(data_ctx != nullptr);
+
+        const std::string tid = find_target_id(gguf_ctx, 0, 0, "down", "blk.0.ffn_down_exps.weight");
+        assert(!tid.empty());
+
+        const std::vector<float> cov = tensor_f32_data(data_ctx, string_format("moe_cov.%s.cov_pop", tid.c_str()), 4);
+        assert(any_abs_gt(cov, 1e-6f));
+
+        gguf_free(gguf_ctx);
+        ggml_free(data_ctx);
+
+        {
+            std::error_code ec;
+            fs::remove(out_f8_path, ec);
+        }
     }
 
     {

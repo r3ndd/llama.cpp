@@ -1,0 +1,19 @@
+Here are three major contemporary theories of consciousness, along with a primary criticism for each.
+
+### 1. Global Workspace Theory (GWT)
+**The Theory:** Proposed originally by Bernard Baars and developed neuroscientifically by Stanislas Dehaene, GWT suggests that the brain consists of many parallel, unconscious specialized modules. Consciousness arises when specific information is selected from these modules and "broadcast" to a global workspace accessible to the rest of the brain. In this view, consciousness acts like a spotlight on a stage; anything in the light becomes available for reporting, decision-making, and memory storage.
+
+**Criticism:**
+*   **The Hard Problem Remains:** While GWT effectively explains the *access* and *reportability* of conscious states (what the brain does when conscious), it fails to explain *phenomenality* (why that processing feels like something from the inside). Critics argue that broadcasting information to a workspace explains cognitive function but not subjective experience.
+
+### 2. Integrated Information Theory (IIT)
+**The Theory:** Developed by neuroscientist Giulio Tononi, IIT proposes that consciousness is identical to the capacity of a system to integrate information. It posits that for any physical system, there is a mathematical value ($\Phi$, or phi) that measures how much integrated information it generates. The higher the $\Phi$, the higher the level of consciousness. IIT implies that consciousness is intrinsic to the structure of a system and can theoretically exist in systems other than humans (including animals or potentially certain artificial networks).
+
+**Criticism:**
+*   **Counterintuitive Implications & Measurement:** Critics point out that if $\Phi$ is the metric, simple circuits (like photodiodes) could technically possess a minimal amount of consciousness if their information integration is high enough. Furthermore, calculating $\Phi$ for any system beyond very small models is computationally intractable, making the theory difficult to test empirically in complex organisms.
+
+### 3. Higher-Order Thought Theory (HOT)
+**The Theory:** Championed by philosophers like David Rosenthal, HOT argues that a mental state becomes conscious only when it is accompanied by a higher-order thought about that state. In this framework, having the sensation of red is a first-order state; being *consciously aware* of the sensation requires a second-order thought ("I am sensing red"). Consciousness is thus a relational property: it is not something a brain state has in isolation, but what it has when targeted by a specific kind of mental content.
+
+**Criticism:**
+*   **The Regress Problem:** If being conscious of a state requires a higher-order thought about it, critics ask whether one must also have a higher-order thought about that second thought to be aware of it. This leads to an infinite regress (a chain of thoughts requiring thoughts about thoughts). Additionally, this theory suggests that non-human animals or very young infants might not possess full consciousness because they may lack the complex meta-cognitive capacity to form these higher-order thoughts.

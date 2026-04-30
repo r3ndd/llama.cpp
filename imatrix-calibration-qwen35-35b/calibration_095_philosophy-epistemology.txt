@@ -1,0 +1,89 @@
+In epistemology, **justification** is the bridge that turns a mere guess into knowledge. For a belief to count as knowledge (under the traditional *Justified True Belief* model), it must be grounded in reason. However, philosophers disagree on *what grounds that justification*.
+
+The three main theories you asked about—Foundationalism, Coherentism, and Reliabilism—offer different answers to the problem of **the Regress Argument**: If I believe $A$ because of $B$, and $B$ because of $C$, how do we stop this chain from going on forever?
+
+Here is an explanation of each theory.
+
+---
+
+### 1. Foundationalism
+**The Metaphor: A Building or Pyramid**
+
+Foundationalism is the oldest and most traditional approach to justification. It argues that knowledge has a structure resembling a building: some beliefs are the foundation, while others rest upon them.
+
+*   **Core Thesis:** Justification flows in one direction (linearly). Every belief must be supported by another belief, *except* for a special set of beliefs called **"Basic Beliefs."**
+*   **Two Types of Beliefs:**
+    1.  **Basic (Foundational) Beliefs:** These are self-justifying. They do not require evidence from other beliefs to be justified. They are often considered "immediate" or "infallible." Examples: "I am having a pain," "2+2=4," or "I see red."
+    2.  **Non-Basic (Inferred) Beliefs:** These derive their justification by being logically connected to the Basic Beliefs.
+*   **How it Solves the Regress:** It stops the chain of reasoning at the basic beliefs. You don't need a reason for your basic beliefs; they are justified by virtue of their existence or clarity (e.g., Descartes' *Cogito*).
+
+**Pros:**
+*   Provides a secure anchor against skepticism.
+*   Intuitively matches how we feel knowledge is structured (some things just "feel" known without proof).
+
+**Cons:**
+*   **The Myth of the Given:** Critics argue that there are no truly self-justifying beliefs. Even sensory experiences (like seeing red) can be mistaken. If basic beliefs can be wrong, the whole structure risks falling.
+*   It creates a gap between belief and reality if the foundation is too private (internal).
+
+---
+
+### 2. Coherentism
+**The Metaphor: A Web or Spider's Silk**
+
+Coherentism emerged as a critique of foundationalism, arguing that there are no "self-justifying" beliefs. Instead, justification comes from the relationship between beliefs.
+
+*   **Core Thesis:** Beliefs are justified if they fit together into a coherent system. There are no basic beliefs; every belief is supported by others.
+*   **The Structure:** Holistic (interconnected). Support flows in multiple directions. If Belief $A$ supports Belief $B$, and $B$ supports $C$, then $C$ also helps support $A$.
+*   **Criteria for Coherence:** It isn't just about not contradicting yourself (consistency). A coherent system must explain connections, logical relationships, and fit together like a puzzle or a crossword.
+
+**How it Solves the Regress:**
+*   It accepts **circularity**. Foundationalists say circular reasoning is bad; Coherentists say that while "bad" for formal logic, it is acceptable for epistemic justification as long as the web is sufficiently robust and non-contradictory.
+
+**Pros:**
+*   Acknowledges the interdependence of knowledge (we rarely believe something in isolation).
+*   Avoids the difficulty of finding "infallible" basic beliefs.
+
+**Cons:**
+*   **The Isolation Objection:** A system of beliefs could be perfectly coherent but completely disconnected from reality. For example, a schizophrenic might have an internally consistent delusion that is logically sound but factually false. Coherentism struggles to explain why truth matters beyond internal consistency.
+*   It makes justification too subjective; different people could form different "coherent" webs.
+
+---
+
+### 3. Reliabilism
+**The Metaphor: A Thermometer or Engine**
+
+Reliabilism differs from the other two because it is an **externalist** theory. Foundationalism and Coherentism are *internalist* (you must be aware of why you are justified). Reliabilism focuses on the *process* that created the belief, regardless of whether the thinker understands that process.
+
+*   **Core Thesis:** A belief is justified if it is produced by a **reliable cognitive process**.
+*   **How it Works:** If your vision usually produces true beliefs about colors in good light, then believing "The wall is blue" based on seeing a blue wall is justified. You don't need to know *how* your eyes work; you just need them to generally work well.
+*   **Reliable Processes:** Vision, memory, introspection, logical deduction, and scientific inquiry (when functioning normally).
+
+**How it Solves the Regress:**
+*   It bypasses the need for reasons entirely. You don't need a chain of beliefs ($A \rightarrow B \rightarrow C$) to justify $D$. If $D$ comes from a reliable mechanism, it is justified.
+
+**Pros:**
+*   Accounts for knowledge in children and animals who have beliefs but cannot articulate reasons.
+*   Aligns well with scientific realism; we trust our senses because evolution made them reliable tools for survival.
+
+**Cons:**
+*   **The Generality Problem:** It is hard to define exactly *which* process is doing the work. Is it "vision," or is it "vision under bad lighting"? The definition changes whether the belief counts as justified.
+*   **New Evil Demon Problem:** Imagine a world where you are being systematically deceived by an evil demon. Your brain (and your "process") functions exactly as it does in the real world. Intuitively, your beliefs aren't justified because they are false, but Reliabilism might say they are justified because the process is reliable *in your actual environment*.
+
+---
+
+### Summary Comparison
+
+| Feature | Foundationalism | Coherentism | Reliabilism |
+| :--- | :--- | :--- | :--- |
+| **Focus** | Structure of beliefs (Linear) | Relationship between beliefs (Holistic) | Origin/Source of the belief (Causal) |
+| **Basic Beliefs?** | Yes (Self-evident) | No (All inferred from others) | N/A (Process matters, not structure) |
+| **Justification Source** | Direct intuition or sensory given. | Mutual support within the system. | Reliability of the cognitive process. |
+| **Internalism/Externalism**| Mostly Internalist | Internalist | **Externalist** |
+| **Main Weakness** | Hard to find "infallible" bases. | Risk of "coherent delusions." | Hard to define the specific process. |
+
+### Conclusion
+*   **Foundationalism** says knowledge rests on solid, unmovable rocks.
+*   **Coherentism** says knowledge is a net that holds itself up.
+*   **Reliabilism** says knowledge is the product of a well-functioning machine (your brain).
+
+Modern epistemology often blends these ideas or uses Reliabilism as a way to fix the perceived gaps in the Internalist theories (Foundationalism/Coherentism).

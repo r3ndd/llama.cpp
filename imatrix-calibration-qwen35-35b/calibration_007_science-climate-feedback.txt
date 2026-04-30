@@ -1,0 +1,54 @@
+### What Are Climate Feedback Loops?
+
+Imagine pushing a snowball down a hill. If the snowball picks up more snow as it rolls, it gets bigger and rolls faster. That is a **feedback loop**.
+
+In climate science, a feedback loop is a process that happens *after* the temperature changes slightly and then influences whether the temperature changes further. There are two main types:
+1.  **Positive Feedback:** Makes the initial change stronger (like the snowball getting bigger). This speeds up global warming.
+2.  **Negative Feedback:** Weakens the initial change (like a snowball slowing down on rough ground). This stabilizes the climate.
+
+The following two examples are both **positive feedback loops**. They take a bit of warming caused by humans and make it much worse.
+
+***
+
+### 1. The Albedo Feedback (The "Reflectivity" Loop)
+**Albedo** is just a fancy word for reflectivity. Think of how wearing white keeps you cool and wearing black makes you hot.
+
+*   **How it works:** Earth has ice caps and glaciers that are white. White surfaces act like mirrors, reflecting sunlight back into space.
+*   **The Loop:**
+    1.  The planet gets slightly warmer.
+    2.  Ice and snow begin to melt.
+    3.  Darker surfaces underneath (like the dark ocean or green land) are revealed.
+    4.  These darker surfaces soak up heat instead of reflecting it.
+    5.  More heat is absorbed, making the planet warmer, causing more ice to melt.
+
+**Simple Summary:** Less ice means less reflection $\rightarrow$ More sun gets in $\rightarrow$ It gets hotter.
+
+### 2. The Water Vapor Feedback (The "Blanket" Loop)
+Water vapor is invisible gas in the air that acts like a thick blanket around the Earth, trapping heat (this is called a greenhouse effect).
+
+*   **How it works:** Warm air can hold more water than cold air. When oceans get warm, they evaporate more water into the air.
+*   **The Loop:**
+    1.  The planet gets slightly warmer.
+    2.  Oceans and lakes evaporate more water.
+    3.  There is now more water vapor floating in the atmosphere.
+    4.  Water vapor traps even more heat, preventing it from escaping back into space.
+    5.  The trapped heat makes the planet warmer, causing *even more* evaporation.
+
+**Simple Summary:** Heat causes evaporation $\rightarrow$ More invisible gas in air $\rightarrow$ Blanket gets thicker $\rightarrow$ It gets hotter.
+
+***
+
+### Comparison: Albedo vs. Water Vapor
+
+While both loops make global warming worse, they work differently. Here is how to tell them apart:
+
+| Feature | **Albedo Feedback** | **Water Vapor Feedback** |
+| :--- | :--- | :--- |
+| **The Mechanism** | It changes how much **sunlight is reflected**. | It changes how much **heat is trapped**. |
+| **The Visual** | You can see it. (Ice caps shrinking). | You can't see it. (It's invisible gas in the air). |
+| **Location** | Mostly happens near the **poles** and high mountains. | Happens everywhere, especially over the **oceans**. |
+| **Speed** | Slower. Ice melts gradually; land takes time to heat up. | Faster. Humidity changes quickly as air warms. |
+| **Strength** | Significant, but limited to cold regions. | The **strongest** feedback loop. It amplifies most other warming effects. |
+
+### Which is more important?
+Scientists consider the **Water Vapor Feedback** the biggest amplifier of all. Because it happens globally and very quickly, it effectively doubles or triples the amount of warming caused by carbon dioxide alone. Albedo is critical for polar regions, but water vapor affects the whole planet.

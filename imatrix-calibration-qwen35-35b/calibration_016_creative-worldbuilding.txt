@@ -1,0 +1,95 @@
+# Town Profile: Lumina-Root
+**Location:** The Sunless Glade (A massive cavern system beneath the Obsidian Peaks)  
+**Population:** Approx. 4,500 inhabitants (The "Dew-Kin")  
+**Primary Resource:** *Lumin-Fungi* (Bioluminescent mushrooms)
+
+---
+
+### I. Economic Overview: The Light Ledger
+In Lumina-Root, light is not a luxury; it is currency, life force, and law. The economy operates on a dual-currency system.
+
+1.  **The Coin (Iron-Shards):** Standard metal coins minted from meteoric iron found in the cavern ceiling. Used for heavy trade with surface-dwelling merchants (salt, steel, leather).
+2.  **The Value (Glow-Units):** Local transactions use **"Lumen-Flasks."** These are sealed glass vials containing dried spores of specific fungal species. Their value is determined by **Duration and Hue.**
+    *   *Violet Vial (Medicinal):* High value. Lasts 24 hours of faint light.
+    *   *Green Vial (Food/Crop):* Standard currency. Used for daily wages.
+    *   *Red Vial (Combat/Defense):* Rare. Used to pay guards or bribe officials. Glows with a warning heat that burns flesh if mishandled.
+
+**Key Industries:**
+*   **The Mycelium Guilds:** Farmers who cultivate vast underground "gardens" of fungi. They control the city's water supply (which is filtered through mycelium).
+*   **Spore-Smithing:** Crafters who grind glowing spores into powders to paint tools, write contracts, or coat weapons. A weapon coated in *Blue-Flux* glows when an enemy approaches.
+*   **Light-Weavers:** Tailors who weave silk made from giant fungal threads. They make lantern-cloaks that allow the wearer to project soft light without consuming fuel.
+
+---
+
+### II. Trade Routes & Goods
+Lumina-Root is isolated from the sun but connected by trade tunnels.
+
+*   **Exports:**
+    *   **Phosphor-Paste:** A sticky gel made from red-caps, used by surface kingdoms for lighthouse maintenance and night-navigation maps.
+    *   **Nebula-Truffles:** Edible mushrooms that change flavor based on the eater's mood (a status symbol).
+    *   **Spore-Scrolls:** Parchment treated with preservative sap; writing on them fades only after 100 years, allowing for long-term contracts.
+
+*   **Imports:**
+    *   **Sun-Steel:** Surface metal is preferred for weapons because it conducts heat better than local iron. It costs more Lumen-Flasks per blade.
+    *   **Surface Grain:** Wheat and corn are considered "dust" by locals, but necessary when the fungal harvest fails due to a "Spore-Plague."
+    *   **Salt-Cakes:** Essential for preserving food. Without salt, fungi rot instantly in the damp cave air.
+
+**The Great Market (Root-Hall):**
+A central cavern where stalls are suspended from stalactites. Merchants do not shout prices; they display glowing flasks. A merchant might hold up a flickering amber vial to indicate "Urgent Need." The silence of Root-Hall is enforced by the **Quiet-Warden**, who ensures bargaining noise doesn't disturb the sleeping giant fungi below.
+
+---
+
+### III. Hazards: The Dark Risks
+Life in the cavern is precarious. The economy must account for insurance against fungal calamities.
+
+1.  **The Spore-Sickness (The Fog):**
+    If a fungus blooms too aggressively, it releases clouds of toxic spores. Inhaled spores can cause hallucinations where victims believe they are floating into the dark, leading them to walk off cliffs.
+    *   *Mitigation:* Citizens must carry "Filter-Masks" made of woven hemp and charcoal. Insurance policies cover loss of income during quarantine periods.
+
+2.  **The Mimic-Caps:**
+    Predatory fungi that look like valuable glowing plants but open when touched. They secrete a paralytic acid.
+    *   *Economic Impact:* "Lumber-Jacks" (harvesters) are paid extra hazard pay. Insurance for lost fingers is mandatory for all Guild workers.
+
+3.  **The Dim-Drift:**
+    Every century, the natural glow of the cavern dims as the fungi lose their energy.
+    *   *Economic Impact:* A city-wide "Rationing" occurs. Citizens must submit their Lumen-Flasks to the Central Bank. Only the wealthy can keep private lights; everyone else walks by the light of communal bonfires (made from burning non-glowing wood).
+
+4.  **Lumin-Predators:**
+    Blind cave monsters that hunt the light itself. They are attracted to high-intensity flares. If a merchant trips and breaks a Red Vial, predators swarm.
+    *   *Social Norm:* Never break a light in public. It is considered bad luck and signals a target for hunters.
+
+---
+
+### IV. Social Norms & Customs
+Culture revolves around the management of light and decay.
+
+*   **The Greeting:**
+    One does not shake hands (hands are often covered in spores). Instead, people exchange **"Dew-Drops."** A small pouch containing liquid condensation from the fungi. It is shared to show trust and that you have clean airways.
+
+*   **The Color Taboo:**
+    *   **Black:** Reserved for funerals. The body is wrapped in black moss so it does not attract predatory moths during the wait of the funeral rites (3 days).
+    *   **Gold:** Reserved only for the High Mycelium Council. A citizen wearing gold spores without permission will be stripped of their citizenship rights.
+
+*   **The Night Cycle:**
+    Since there is no sun, time is measured by **"Bloom-Tides."**
+    *   *The Bloom:* When the central garden glows brightest (Economy active time).
+    *   *The Fading:* When lights are dimmed. This is mandatory for "Deep Sleep," a period where all work stops and citizens must be in their homes. Being caught outside during the Fading is punishable by confiscation of your Light-Flask.
+
+*   **Inheritance:**
+    Wealth is passed down, but you cannot inherit a *Lumen-Flask* that has dimmed. You must pass on the skills to grow new ones. A common heirloom is the **"Breeding Vial,"** containing the starter culture of the family's primary fungus strain.
+
+---
+
+### V. Sample Local Legend
+*"The Merchant of Ash"*
+
+> *It is said long ago, a merchant tried to smuggle a Sun-Stone (a surface gem that emits real sun) into the Root-Hall. He kept it hidden in his cloak. For weeks, the stone attracted every predator in the cavern, but its unnatural light blinded them. Finally, the High Council found him, but he was dead—frozen solid from his skin up to his eyes, as if time had stopped. They say his body now hangs above the Market entrance, a reminder that true sun kills things grown in the dark.*
+>
+> *Don't steal light you can't tend. It burns the taker before it warms the held.*
+
+---
+
+### VI. Adventure Hooks
+1.  **The Failing Garden:** The central Lumen-Garden has stopped glowing. A merchant's guild is collapsing; adventurers are hired to travel to the "Root-Sanctum" in exchange for free light-shelter.
+2.  **The Black Smuggling Ring:** Someone is selling fake Green Flasks that dim instantly, ruining crops. The town Guard wants you to investigate a specific market stall without getting your own gear contaminated.
+3.  **The Surface Contract:** A surface merchant arrives with iron and promises gold if Lumina-Root can export enough Red Caps for a war on the surface. The locals know Red Caps require human blood-fertilizer to grow strong; do you help, or stop this?

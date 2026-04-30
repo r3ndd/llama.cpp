@@ -1,0 +1,33 @@
+The estimated post-test probability (Positive Predictive Value) after a positive result is approximately **16.5%**.
+
+Despite the test having high sensitivity and specificity, the low prevalence of the disease means that false positives still vastly outnumber true positives.
+
+Here is the step-by-step breakdown using a hypothetical population of **10,000** people to visualize the numbers:
+
+### 1. The Population Distribution (Prevalence)
+*   **Total Population:** 10,000
+*   **People with Disease (1%):** 100
+*   **People without Disease (99%):** 9,900
+
+### 2. Test Results for Those WITH the Disease (Sensitivity)
+*   **True Positives (Positive result, actually has disease):**
+    $98\% \text{ of } 100 = \mathbf{98}$ people
+
+### 3. Test Results for Those WITHOUT the Disease (Specificity)
+*   *Note: Specificity refers to how well the test identifies healthy people as negative.*
+*   **False Positives (Positive result, but is actually healthy):**
+    $100\% - 95\% \text{ specificity} = 5\% \text{ error rate}$
+    $5\% \text{ of } 9,900 = \mathbf{495}$ people
+
+### 4. Calculate the Total Positive Results
+*   $\text{True Positives} + \text{False Positives}$
+*   $98 + 495 = \mathbf{593}$ total positive test results
+
+### 5. Calculate Post-Test Probability (PPV)
+This asks: "Given that you are one of these 593 people who tested positive, what is the chance you actually have the disease?"
+
+*   $\text{Probability} = \frac{\text{True Positives}}{\text{Total Positives}}$
+*   $98 / 593 \approx 0.1652$
+
+### Result
+There is a **16.5%** probability that you actually have the disease if you test positive. This phenomenon is known as the *base rate fallacy*, where low disease prevalence causes false positives to overwhelm true positives, even with a highly accurate test.

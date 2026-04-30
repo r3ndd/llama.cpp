@@ -1,0 +1,58 @@
+The problem of personal identity asks what conditions must be met for a person $P_1$ at time $t_1$ to be the *same person* as a person $P_2$ at time $t_2$. While our memories and bodies change, we intuitively feel that we persist through time. Philosophers have proposed several competing criteria for this persistence.
+
+Below are three major theories of personal identity over time, each accompanied by a significant critique.
+
+---
+
+### 1. The Psychological Continuity Theory
+**Proponents:** John Locke (Memory Theory), Derek Parfit (Psychological Connectedness).
+
+**The Theory:**
+This theory argues that personal identity is not grounded in the physical body or an immaterial soul, but in the continuity of mental states.
+*   **Locke’s View:** In his *Essay Concerning Human Understanding*, Locke famously stated that "person" is a forensic term related to accountability and consciousness. For Locke, you are the same person over time if your current self can remember the experiences of your past self. This was intended to solve issues regarding sleep or amnesia where body continuity remains but memory might be fragmented.
+*   **Parfit’s Revision:** Modern philosophers like Parfit expanded this to "Psychological Connectedness." It is not about a perfect chain of memory (which would exclude sleeping), but the overlap of psychological states (desires, intentions, character traits) between stages of your life.
+
+**The Critique: The Problem of Fission and Transitivity**
+The most famous critique involves scenarios where psychological continuity branches rather than remains linear.
+*   **Scenario:** Imagine a futuristic teleportation device that scans your brain and sends the information to Mars. However, it malfunctions and creates *two* perfect copies on Earth and Mars, both possessing your exact memories and psychology.
+*   **The Conflict:** If personal identity is defined by psychological continuity, then both people on Earth and on Mars are you. This leads to a contradiction: Identity is usually transitive (if A is B, and B is C, then A is C). However, here $A$ (You) $\neq$ $B$ (Copy 1) because two distinct entities exist.
+*   **Implication:** If identity cannot accommodate branching cases without logical contradiction, then psychological continuity might not constitute *identity*, but rather a relation that is *close enough* to matter without being literal identity (as Parfit concludes).
+
+---
+
+### 2. The Biological Theory (Animalism)
+**Proponents:** Eric Olson, Sydney Shoemaker.
+
+**The Theory:**
+Also known as "Animalism," this theory asserts that human persons are identical to biological organisms (human animals). You are the same person over time if and only if you are the same living body or organism.
+*   **Core Idea:** We should not think of humans as a mind trapped in a machine, but rather a human being who thinks. Just as a caterpillar is the same animal as the butterfly it becomes (despite radical physical change), a human infant is the same biological entity as an elderly person. If your body continues to function biologically, you continue to exist, regardless of what happens to your mind or memories.
+
+**The Critique: The Brain Transplant Intuition**
+Biological identity struggles to align with our deep-seated intuitions regarding where consciousness resides.
+*   **Scenario:** Imagine a successful "Brain Transplant." Your brain is removed and placed into the body of someone else (who happens to have been in a coma).
+*   **The Conflict:** The Biological Theory says you remain in the original, headless body that still breathes because it is biologically alive. However, most people intuitively feel that "you" travel with the brain to the new body, where the memories and personality wake up.
+*   **Implication:** If we are merely animals, then the body without the brain would be a conscious person who thinks they are someone else, or an unconscious zombie, while "you" (the mind) cease to exist in that body. This suggests that biological continuity is neither necessary nor sufficient for personal identity; psychological features seem to matter more to our concept of self than mere biological function.
+
+---
+
+### 3. Substance Dualism
+**Proponents:** René Descartes, traditional Theological views.
+
+**The Theory:**
+This theory posits that a person is constituted by two distinct substances: the physical body (extended, observable, material) and the mind/soul (unextended, unobservable, immaterial). Personal identity consists in the persistence of the immaterial soul.
+*   **Core Idea:** Descartes argued via his "cogito ergo sum" that because you can doubt your body but not your thinking, you are essentially a thinking thing (*res cogitans*). The body is merely an instrument. Because the soul is non-physical and simple (has no parts), it cannot decompose; therefore, identity over time is guaranteed as long as the soul persists.
+
+**The Critique: The Interaction Problem (Causal Closure)**
+Substance Dualism faces a massive challenge from modern physics regarding how two different substances interact.
+*   **The Conflict:** If the mind is non-physical and the body is physical, how do they interact? Specifically, how does a non-material thought cause a material neuron to fire, resulting in muscle movement? Modern science operates on the principle of the "causal closure" of physics: every physical event has a sufficient physical cause.
+*   **Implication:** If the mind causes physical actions, it must violate laws of conservation of energy (introducing new energy into the closed system). If the mind cannot affect the body, then your decisions do not actually control your limbs (a view known as *epiphenomenalism*). This makes the concept of a dualistic self scientifically incoherent within our current understanding of the physical world.
+
+---
+
+### Summary Table
+
+| Theory | Criterion of Identity | Major Critique |
+| :--- | :--- | :--- |
+| **Psychological Continuity** | Memory & Mental Connectedness | **Fission:** Cannot handle branching cases (two copies of you). |
+| **Biological Animalism** | The Living Human Body | **Brain Transplant:** Intuitively wrong to say identity stays with a headless body. |
+| **Substance Dualism** | Persistence of the Soul | **Interaction Problem:** Hard to explain how a non-physical mind moves physical matter. |

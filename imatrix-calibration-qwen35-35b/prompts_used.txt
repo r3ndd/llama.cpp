@@ -1,0 +1,239 @@
+Refactor this Python function for readability and explain each change: `def f(x):return [i*i for i in x if i%2==0]`.
+
+A C++ function occasionally crashes when accessing `vec[i+1]` in a loop. Propose a safe fix and explain edge cases.
+
+Given a table with columns `(user_id, created_at, status)`, suggest indexing strategy for frequent queries filtering by user and date range.
+
+Design a REST API for managing project tasks with pagination, filtering, and optimistic concurrency control.
+
+Explain entropy intuitively for high-school students, then give one everyday example and one engineering example.
+
+Summarize how CRISPR-Cas9 edits genes, including one therapeutic use and one ethical concern.
+
+What are climate feedback loops? Compare albedo feedback and water-vapor feedback in simple terms.
+
+Why do catalysts speed up reactions without being consumed? Include activation energy in your explanation.
+
+Compute the derivative of `sin(x^2) * e^(3x)` and show each rule used.
+
+Give an intuitive explanation of eigenvectors and eigenvalues with a 2D geometric example.
+
+A test has 98% sensitivity, 95% specificity, and disease prevalence 1%. Estimate post-test probability after a positive result.
+
+Compare O(n log n), O(n^2), and O(2^n) with practical algorithm examples.
+
+Write a short story opening (180-220 words) about an archivist discovering a forgotten map on a generation ship.
+
+Write a 14-line poem about rain in a city at dawn, with vivid sensory imagery.
+
+Create a dialogue between a skeptical engineer and an optimistic artist planning a public installation.
+
+Invent a small fantasy town economy based on bioluminescent fungi; include trade, hazards, and social norms.
+
+What were the key institutional differences between the Roman Republic and the early Roman Empire?
+
+Describe three major social impacts of the Industrial Revolution in 19th-century Britain.
+
+Explain how the Silk Road influenced cultural exchange beyond just trade goods.
+
+Give a concise timeline of key Cold War events from 1947 to 1991 with one-line significance notes.
+
+Create a lightweight go-to-market plan for a B2B SaaS startup launching an AI meeting-notes product.
+
+Compare usage-based, seat-based, and hybrid pricing for developer tools. When is each best?
+
+Outline a simple 12-month financial model structure for an e-commerce startup (revenue, COGS, CAC, churn).
+
+Draft a risk register with mitigation strategies for a company migrating critical services to cloud infrastructure.
+
+Explain herd immunity and why vaccine coverage thresholds vary by disease.
+
+Describe phases I-IV of clinical trials and the primary goal of each phase.
+
+Compare soluble and insoluble fiber, including health effects and food examples.
+
+What is neuroplasticity, and how does practice shape neural pathways over time?
+
+Summarize core GDPR principles and practical implications for a small web app collecting user analytics.
+
+Propose a basic internal AI governance policy for a mid-size company using LLMs in customer support.
+
+Create a 45-minute lesson plan to teach fractions to 5th graders, with one hands-on activity and an exit ticket.
+
+Design a concise rubric for evaluating student presentations on scientific topics.
+
+Compare utilitarian and deontological responses to the trolley problem in clear language.
+
+Present three major theories of consciousness and one criticism of each.
+
+Explain drivers of rapid urbanization in developing regions and two resulting infrastructure challenges.
+
+Discuss causes of water stress and practical adaptation strategies for drought-prone cities.
+
+Sketch a fault-tolerant architecture for a real-time telemetry pipeline with ingestion, processing, and storage layers.
+
+How do you evaluate tradeoffs between latency, consistency, and cost in distributed systems? Give a concrete scenario.
+
+Describe demand-pull vs cost-push inflation and how central banks may respond to each.
+
+Explain how automation can both displace and create jobs, with short-term and long-term effects.
+
+In Rust, explain why a borrowed reference escapes this function and show a corrected version: `fn pick<'a>(a: &'a str, b: &str) -> &'a str { if a.len()>b.len(){a}else{b} }`.
+
+Given nested Promise chains in JavaScript, rewrite them with async/await and add robust error handling.
+
+A Go worker pool leaks goroutines during shutdown. Propose a clean cancellation pattern using context and channels.
+
+Create a TypeScript discriminated union for payment methods and show exhaustive switch handling with compile-time safety.
+
+A Java service shows frequent GC pauses. Suggest code-level and JVM-level optimizations for lower latency.
+
+Optimize a C# LINQ query pipeline that materializes large intermediate collections; propose a more memory-efficient approach.
+
+Write a safe Bash script pattern for processing files with spaces, strict error handling, and cleanup traps.
+
+Design cursor-based pagination for a GraphQL list endpoint and explain how to avoid duplicate or missing items.
+
+Provide a PostgreSQL upsert pattern for idempotent event ingestion with conflict handling and audit timestamps.
+
+A container is restarted due to incorrect health checks. Show correct readiness and liveness probe strategy for startup-heavy apps.
+
+How do transit and radial-velocity methods detect exoplanets, and what are their main limitations?
+
+Explain plate tectonics and how it drives earthquakes, volcanism, and mountain formation.
+
+What causes ocean acidification, and how does it affect marine food webs and shell-forming organisms?
+
+Compare lithium iron phosphate and nickel-manganese-cobalt battery chemistries for EV use cases.
+
+Clarify what a p-value does and does not mean, with a concrete experiment example.
+
+Explain modular arithmetic with examples from clock math and cryptography.
+
+Describe gradient descent intuitively and discuss learning-rate tradeoffs with failure modes.
+
+Contrast Euclidean and non-Euclidean geometry using triangles on a sphere.
+
+Define Nash equilibrium with a simple two-player game and explain why it matters.
+
+Give a beginner-friendly guide to direct proof, contradiction, and induction, with one example each.
+
+Write a 120-word microfiction about a librarian who can hear unwritten books whispering.
+
+Draft a short screenplay scene where two siblings debate selling their childhood home during a storm.
+
+Compose a modern fable about attention spans and include a clear moral at the end.
+
+Write a vivid travel vignette about arriving in a mountain village before sunrise.
+
+Create a character sketch of a retired robotics engineer who restores antique clocks.
+
+Summarize the rise and administrative innovations of the Mughal Empire in South Asia.
+
+Explain how the Meiji Restoration transformed Japan's institutions and economy.
+
+Why was the Haitian Revolution globally significant politically and economically?
+
+Discuss how the printing press changed knowledge distribution, religion, and state power in Europe.
+
+Give an overview of African decolonization after World War II and key challenges faced by new states.
+
+Create an example quarterly OKR plan for a small product team improving user activation.
+
+Define funnel stages and key metrics for a B2B outbound sales pipeline.
+
+Propose a change-management plan for introducing a new ERP system across multiple departments.
+
+Outline a customer discovery interview guide for validating a new fintech budgeting app.
+
+Identify top supply-chain risks for a consumer electronics brand and mitigation options.
+
+Explain major modifiable cardiovascular risk factors and practical prevention strategies.
+
+What drives antibiotic resistance, and what stewardship practices reduce its spread?
+
+Summarize how sleep duration and quality affect cognition, mood, and metabolic health.
+
+Define R0 and effective reproduction number, and explain how interventions change transmission dynamics.
+
+Compare benefits and limitations of standardized mental-health screening tools in primary care.
+
+Explain modern antitrust concerns in digital platforms, including network effects and data advantages.
+
+What does privacy by design mean in product development? Give practical examples for a mobile app.
+
+Describe policy tradeoffs between open government data and citizen privacy protections.
+
+Draft a high-level incident disclosure policy after a significant cybersecurity breach.
+
+Explain how transparent public procurement can reduce corruption and improve service delivery.
+
+Create a simple curriculum map linking learning objectives, activities, and assessments for a 4-week unit.
+
+Compare formative feedback methods that improve student revision quality in writing assignments.
+
+Design a project-based learning assignment integrating science and local environmental issues.
+
+Explain Universal Design for Learning principles with practical classroom implementation tips.
+
+Outline a workshop plan for adult learners transitioning into data-related careers.
+
+Contrast virtue ethics with consequentialism using a professional responsibility scenario.
+
+Summarize compatibilist and incompatibilist views on free will in accessible language.
+
+Present major theories of personal identity over time and one critique of each.
+
+Evaluate ethical tensions between convenience and autonomy in algorithmic recommendation systems.
+
+Explain foundationalism, coherentism, and reliabilism as theories of justified belief.
+
+Assess major climate risks for coastal megacities and adaptation pathways over the next 30 years.
+
+How do land use, logistics, and policy shape regional food security outcomes?
+
+Describe key push and pull factors behind cross-border migration and urban settlement patterns.
+
+Discuss geographic constraints and social tradeoffs when siting large wind and solar projects.
+
+Explain the urban heat-island effect and practical mitigation methods for dense neighborhoods.
+
+Provide an intuitive explanation of PID control and tuning tradeoffs in industrial automation.
+
+Create a lightweight FMEA example for a home medical device and rank risks by severity and detectability.
+
+Why are geometric tolerances essential in mechanical design, and how do they impact cost?
+
+Compare short-duration and long-duration energy storage options for grid balancing.
+
+Outline key safety layers for collaborative robots operating near human workers.
+
+Explain policy transmission lags in monetary policy and why they complicate inflation control.
+
+Use positive and negative externalities to explain carbon pricing and clean-energy subsidies.
+
+Analyze drivers of housing unaffordability and compare zoning reform with demand-side subsidies.
+
+What is the productivity paradox in the digital era, and what explanations have economists proposed?
+
+Discuss how income inequality and intergenerational mobility can move in different directions.
+
+Explain why literal translation can fail for idioms and cultural references, with examples.
+
+Provide a checklist for evaluating credibility of online news sources and claims.
+
+Describe regenerative agriculture practices and potential tradeoffs for smallholder farmers.
+
+Summarize evidence-based principles for habit formation and behavior change.
+
+Outline a practical accessibility audit process for a public-sector website.
+
+Create a simple threat model for a consumer messaging app including assets, actors, and mitigations.
+
+Explain periodization in endurance training and why recovery blocks matter.
+
+How can museums balance historical accuracy, inclusivity, and audience engagement in exhibit design?
+
+Explain circular economy principles and how they differ from traditional recycling programs.
+
+Draft a community disaster-preparedness framework for floods, heatwaves, and prolonged power outages.

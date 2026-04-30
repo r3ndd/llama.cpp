@@ -1,0 +1,60 @@
+The following outline details the key safety layers for collaborative robots (cobots). This framework follows the "Defense-in-Depth" philosophy required by international standards, primarily **ISO 10218** (Robot Safety) and **ISO/TS 15066** (Collaborative Assembly).
+
+Safety for cobots is not inherent to the device alone; it relies on a hierarchy of measures ranging from physical design to organizational policy.
+
+### I. Intrinsic Hardware Design (Passive Safety)
+*The robot arm is designed physically to minimize injury potential even in failure scenarios.*
+
+*   **Lightweight Construction:** Reduced mass minimizes impact energy during accidental contact.
+*   **Rounded Edges & Compliant Surfaces:** No sharp corners; surfaces that conform to human anatomy (ISO/TS 15066).
+*   **Force-Limited Actuators:** Motors equipped with high-accuracy torque sensors at every joint to detect abnormal resistance or collisions instantly.
+*   **End-Effector Design:** Tools, grippers, and flanges must be designed without pinch points or sharp protrusions.
+*   **Cable Management:** Safety-rated cable chains that break away or shield wires to prevent entanglement hazards if the arm moves unexpectedly.
+
+### II. Controller & Firmware Safety (Active Safety)
+*Software logic that governs how the robot behaves during operation and fault conditions.*
+
+*   **Safety-Rated Monitored Stop (SRMS):** The ability to bring the robot to a safe stop within a controlled distance without using a powered brake, allowing it to remain in position but not move.
+*   **Power and Torque Limiting:** Hardware/Software logic that physically limits the maximum current/torque output to prevent excessive force generation.
+*   **Emergency Stop (E-Stop):** Hard-wired safety circuits accessible to humans that override all motion commands immediately upon activation.
+*   **Safe Torque Off (STO):** A function that cuts power to the motor windings while keeping control logic powered, ensuring the robot does not drift when stopped.
+*   **Fault Monitoring:** Continuous self-diagnosis of sensors, communication loops, and voltage fluctuations (PLd or PLe requirements).
+
+### III. Operational Safety Modes (Interaction Types)
+*Defined by ISO/TS 15066, these modes dictate how the human and robot share the workspace.*
+
+*   **Safety-Rated Monitored Stop:** The robot halts completely when a human enters the zone and restarts only after the human exits or acknowledges safety.
+*   **Hand Guiding (Manual Guidance):** A worker physically pushes the robot through a path; torque sensors detect this intent and drive the arm accordingly. Requires immediate stop if resistance is felt outside guidance.
+*   **Speed and Separation Monitoring (SSM):** The safest "dynamic" mode. Sensors (cameras, laser scanners) track human proximity. As the human gets closer, the robot slows down; upon contact, it stops or retreats to a safe distance.
+*   **Power and Force Limiting (PFL):** The robot operates in constant motion but is limited so that if it contacts a human, the force generated stays below injury thresholds (e.g., 100N for rigid contact).
+
+### IV. Supplementary Safeguards (Supplemental Protection)
+*External systems used when PFL limits cannot be guaranteed or when operating speed exceeds safe limits.*
+
+*   **Area Scanners / Light Curtains:** Sensors that create a safety boundary; if breached, the robot halts before entering the zone.
+*   **Safety Mats / Pressure Sensitive Runways:** Floor-based sensors that stop the robot if pressure is applied to a specific area where a worker should not be standing.
+*   **Guarding Fencing:** Traditional physical barriers are still permitted and often required for cobots performing high-speed, high-force tasks outside PFL limits (Hybrid approach).
+
+### V. Risk Assessment & Process Integration
+*Safety must be engineered into the workflow, not just the hardware.*
+
+*   **ISO 12100 Risk Assessment:** Mandatory assessment to identify specific hazards (crushing, shearing, collision) before deployment.
+*   **Reach Calculations:** Determining the maximum reach of the robot + end-effector and verifying safety distances based on approach speed (ISO 13855).
+*   **Injury Threshold Verification:** Calculating kinetic energy to ensure impact speeds do not exceed pain or injury limits defined in ISO/TS 15066 (e.g., specific force limits for the head, neck, or torso).
+*   **Validation Testing:** Physical testing of the safety system *after* installation but *before* release to production.
+
+### VI. Human Factors & Organizational Safety
+*The human element is often the most critical variable in collaboration.*
+
+*   **Worker Training:** Educating staff on specific robot behaviors, warning signals (auditory/visual), and correct reactions during faults.
+*   **Procedures for Lockout/Tagout (LOTO):** Clear protocols for maintenance when the safety features must be bypassed temporarily (requires risk mitigation like blocking).
+*   **Behavioral Expectations:** Defining where humans are allowed to stand (no standing behind robots) and rules for hand-offs.
+*   **Incident Response Plan:** A protocol for what to do immediately following a collision or near-miss.
+
+### VII. Summary of Safety Hierarchy
+1.  **Design Out Hazards:** Use cobots with low mass/torque where possible.
+2.  **Protective Measures:** Use PFL, SSM, and hand guiding modes.
+3.  **Warnings:** Use lights/beacons to indicate robot status.
+4.  **Information:** Provide clear signage and training.
+
+***Disclaimer:** "Collaborative Robot" is a market term, not a safety classification. All robots must be assessed on an application-specific basis against ISO standards before deployment.*

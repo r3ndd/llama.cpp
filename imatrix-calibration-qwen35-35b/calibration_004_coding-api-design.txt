@@ -1,0 +1,248 @@
+Here's a comprehensive REST API design for managing project tasks, featuring pagination, filtering, and optimistic concurrency control.
+
+---
+
+## 🧩 API Overview
+
+**Base URL**: `https://api.example.com/v1`
+
+**Supported Methods**: `GET`, `POST`, `PUT`, `DELETE`, `PATCH`
+
+**Data Format**: JSON
+
+---
+
+## 📋 Core Endpoints
+
+### 1. List Tasks (with pagination and filtering)
+
+**Endpoint**: `GET /tasks`
+
+**Query Parameters**:
+- `page`: Integer (default: 1)
+- `page_size`: Integer (1–100, default: 20)
+- `status`: Enum (`pending`, `in_progress`, `completed`, `cancelled`)
+- `assignee_id`: UUID (filter by assignee)
+- `priority`: Enum (`low`, `medium`, `high`)
+- `created_after`: ISO 8601 timestamp
+- `created_before`: ISO 8601 timestamp
+- `sort_by`: `created_at`, `due_date`, `priority`
+- `sort_order`: `asc`, `desc`
+
+**Response Example**:
+```json
+{
+  "data": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "title": "Implement login",
+      "description": "Add secure login functionality",
+      "status": "in_progress",
+      "priority": "high",
+      "assignee_id": "123e4567-e89b-12d3-a456-426614174000",
+      "created_at": "2024-01-15T10:00:00Z",
+      "updated_at": "2024-01-16T14:30:00Z",
+      "due_date": "2024-01-20T23:59:59Z",
+      "version": 3
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "page_size": 20,
+    "total_items": 156,
+    "total_pages": 8,
+    "has_next": true,
+    "has_prev": false
+  },
+  "links": {
+    "self": "/tasks?page=1&page_size=20",
+    "next": "/tasks?page=2&page_size=20",
+    "prev": null
+  }
+}
+```
+
+---
+
+### 2. Get Single Task
+
+**Endpoint**: `GET /tasks/{id}`
+
+**Response Headers**:
+- `ETag`: `"v3"` (version string)
+- `Last-Modified`: `2024-01-16T14:30:00Z`
+
+**Response Body**:
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "title": "Implement login",
+  "description": "Add secure login functionality",
+  "status": "in_progress",
+  "priority": "high",
+  "assignee_id": "123e4567-e89b-12d3-a456-426614174000",
+  "created_at": "2024-01-15T10:00:00Z",
+  "updated_at": "2024-01-16T14:30:00Z",
+  "due_date": "2024-01-20T23:59:59Z",
+  "version": 3
+}
+```
+
+---
+
+### 3. Create Task
+
+**Endpoint**: `POST /tasks`
+
+**Request Body**:
+```json
+{
+  "title": "Design API schema",
+  "description": "Define REST endpoints",
+  "priority": "medium",
+  "assignee_id": "123e4567-e89b-12d3-a456-426614174000",
+  "due_date": "2024-01-25T23:59:59Z"
+}
+```
+
+**Response**:
+- `201 Created`
+- `Location: /tasks/{id}`
+- `ETag: "v1"`
+
+---
+
+### 4. Update Task (Optimistic Concurrency)
+
+**Endpoint**: `PUT /tasks/{id}`
+
+**Headers**:
+- `If-Match: "v3"`
+
+**Request Body**:
+```json
+{
+  "title": "Design API schema",
+  "description": "Updated description",
+  "status": "completed",
+  "priority": "high"
+}
+```
+
+**Success Response**:
+- `200 OK`
+- `ETag: "v4"`
+
+**Conflict Response**:
+- `409 Conflict`
+```json
+{
+  "error": "CONFLICT",
+  "message": "Resource has been modified by another client",
+  "current_version": "v5",
+  "resource": "/tasks/550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+---
+
+### 5. Partial Update Task
+
+**Endpoint**: `PATCH /tasks/{id}`
+
+**Headers**:
+- `If-Match: "v3"`
+
+**Request Body**:
+```json
+{
+  "status": "completed"
+}
+```
+
+**Response**:
+- `200 OK` with updated resource and new `ETag`
+
+---
+
+### 6. Delete Task
+
+**Endpoint**: `DELETE /tasks/{id}`
+
+**Headers**:
+- `If-Match: "v3"`
+
+**Response**:
+- `204 No Content`
+- Or `409 Conflict` if version mismatch
+
+---
+
+## 🔐 Optimistic Concurrency Control
+
+- Implemented via `ETag` header and `If-Match` request header.
+- Each resource has a `version` field.
+- On `PUT` or `DELETE`, server checks if `If-Match` matches current `version`.
+- Mismatch returns `409 Conflict`.
+
+---
+
+## 🛠️ Error Handling
+
+**Standard Error Format**:
+```json
+{
+  "error": "VALIDATION_ERROR",
+  "message": "Invalid field value for status",
+  "details": [
+    {
+      "field": "status",
+      "message": "Must be one of: pending, in_progress, completed, cancelled"
+    }
+  ],
+  "timestamp": "2024-01-16T15:00:00Z"
+}
+```
+
+**Common Status Codes**:
+- `400` – Bad Request
+- `401` – Unauthorized
+- `403` – Forbidden
+- `404` – Not Found
+- `409` – Conflict
+- `422` – Unprocessable Entity
+- `429` – Too Many Requests
+- `500` – Internal Server Error
+
+---
+
+## 🧪 Example Client Workflow
+
+```javascript
+// 1. Fetch task
+const res = await fetch('https://api.example.com/v1/tasks/550e8400-e29b-41d4-a716-446655440000');
+const { version } = res.headers.get('ETag');
+
+// 2. Modify task
+await fetch('https://api.example.com/v1/tasks/550e8400-e29b-41d4-a716-446655440000', {
+  method: 'PUT',
+  headers: {
+    'Content-Type': 'application/json',
+    'If-Match': `"${version}"`
+  },
+  body: JSON.stringify({ status: 'completed' })
+});
+```
+
+---
+
+## ✅ Best Practices
+
+- Use `ETag` and `If-Match` for concurrency
+- Return versioned resources in all responses
+- Support filtering, sorting, and pagination
+- Return detailed error responses
+- Use standard HTTP methods and status codes
+- Document all endpoints clearly
+
+This design supports scalable, concurrent, and user-friendly task management via REST.

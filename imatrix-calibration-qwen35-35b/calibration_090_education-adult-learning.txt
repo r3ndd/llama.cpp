@@ -1,0 +1,126 @@
+This workshop plan is designed around the principles of **Andragogy** (adult learning), emphasizing self-direction, practical application, and peer-to-peer networking. It focuses on moving from "consuming" data to "creating" value with data.
+
+### **Workshop Title:** From Data Curiosity to Career Confidence
+**Subtitle:** A 4-Day Intensive for Career Transitioners in the Data Field
+
+---
+
+### **1. Executive Summary**
+*   **Target Audience:** Adults (25+) pivoting from non-tech sectors (e.g., marketing, admin, retail) into data roles (Analyst, Business Intelligence, Operations Research).
+*   **Duration:** 4 Full Days (6 hours/day) + Pre/Post-work modules.
+*   **Format:** Hybrid or In-Person (Virtual is acceptable with breakout rooms).
+*   **Class Size:** Max 20 learners for effective mentorship.
+*   **Prerequisites:** Basic computer literacy, willingness to learn logic over memorization, access to a laptop with internet.
+
+---
+
+### **2. Learning Objectives**
+By the end of this workshop, participants will be able to:
+1.  **Define** the modern data landscape and specific career paths.
+2.  **Query** real-world databases using SQL to extract actionable insights.
+3.  **Clean and Analyze** datasets using Python (Pandas) or Excel/Google Sheets.
+4.  **Visualize** data effectively to tell a business story (Tableau/PowerBI).
+5.  **Portfolio** their work into a GitHub repository or website.
+6.  **Articulate** their value proposition in resumes and interviews.
+
+---
+
+### **3. Pre-Workshop Phase (1 Week Before)**
+*Adult learners often fail to finish workshops because they lack "foundational housekeeping" first.*
+
+*   **Week -7 Days:** Skill Assessment Survey (Math background, coding experience).
+*   **Week -4 Days:** Environment Setup Guide (Install VS Code, Anaconda, SQL client, or set up Google Colab accounts).
+*   **Assignment:** Participants bring one dataset from their previous career field (e.g., Sales logs, HR records) for the "Capstone Project."
+
+---
+
+### **4. The 4-Day Curriculum**
+
+#### **Day 1: Data Literacy & The Business Context**
+*Goal: Demystify data and understand "Why" we use it.*
+*   **09:00 – 10:30:** **Icebreaker & Mindset:** Imposter syndrome, the growth mindset, and defining roles (Analyst vs. Engineer vs. Scientist).
+*   **10:45 – 12:30:** **Data Lifecycle Workshop:** ETL basics, Data Governance, Ethics, and Privacy (GDPR/CCPA awareness).
+*   **13:30 – 15:00:** **Excel/Sheets Advanced:** Pivot tables, VLOOKUP/XLOOKUP as a foundation for logical thinking.
+*   **15:15 – 16:30:** **Group Activity:** Analyzing the pre-work dataset to find 3 anomalies or trends (no coding required yet).
+*   **Key Takeaway:** Understanding that data is a tool for decision-making, not just math.
+
+#### **Day 2: The Engine Room (SQL)**
+*Goal: Mastering the most requested skill in entry-level data.*
+*   **09:00 – 11:00:** **Database Foundations:** Relational databases, Schema, Keys, and normalization concepts.
+*   **11:15 – 13:00:** **SQL Syntax (Interactive):** SELECT, WHERE, GROUP BY, JOINs.
+    *   *Activity:* "The Mystery Shopper" – Solve business questions by querying a sample retail database.
+*   **14:00 – 16:00:** **Advanced SQL & Optimization:** Window Functions (RANK, ROW_NUMBER) and Subqueries.
+*   **16:00 – 17:00:** **Debugging Clinic:** Learners share the errors they hit; group troubleshooting session.
+*   **Key Takeaway:** Ability to extract specific data points needed for analysis without exporting to Excel.
+
+#### **Day 3: Analysis & Visualization (Python + BI)**
+*Goal: Moving from extraction to interpretation.*
+*   **09:00 – 12:00:** **Intro to Python for Data:**
+    *   Jupyter Notebooks, Variables, Lists, and the Pandas Library.
+    *   Handling missing data (Imputation vs. Dropping).
+*   **13:00 – 15:00:** **Statistical Basics for Business:** Mean/Median, Standard Deviation, Correlation vs. Causation.
+*   **15:15 – 17:00:** **Visualization Storytelling:** Choosing the right chart (Bar vs. Line vs. Scatter). Introduction to PowerBI or Tableau Public.
+*   **Key Takeaway:** Transforming raw numbers into a visual narrative that non-technical stakeholders understand.
+
+#### **Day 4: Career Transition & Portfolio Building**
+*Goal: Selling their new skills to employers.*
+*   **09:00 – 11:30:** **The Capstone Build:** Participants work on transforming their pre-work dataset into a 5-slide executive summary + code notebook.
+*   **12:30 – 14:00:** **Resume & LinkedIn Overhaul:** "Translating" previous experience (e.g., "Managed inventory" becomes "Managed supply chain logistics data").
+*   **14:00 – 16:00:** **Mock Interviews:** Behavioral questions + SQL coding challenges (live).
+    *   *Focus:* STAR method (Situation, Task, Action, Result) and explaining technical concepts simply.
+*   **16:00 – 17:00:** **Networking & Roadmap:** Setting up GitHub, joining communities (DataTalks.Club, Kaggle), and next steps for self-study.
+
+---
+
+### **5. The Capstone Project Structure**
+To ensure learning retention, the workshop culminates in a mini-project.
+*   **The Brief:** Participants use their own dataset OR a provided real-world dataset (e.g., Spotify trends, Airbnb listings).
+*   **The Deliverables:**
+    1.  A SQL script to extract/prepare data.
+    2.  A Python Notebook with cleaning and analysis code.
+    3.  A PDF Dashboard or Slide Deck summarizing the business insight.
+    4.  A GitHub README explaining how to run the code.
+
+---
+
+### **6. Facilitation Strategy for Adult Learners**
+*   **Peer Mentoring:** Assign "Buddy Pairs" so learners aren't reliant solely on instructors. Adults learn well by teaching others.
+*   **Flexible Pacing:** Provide a "Fast Track" for those who know SQL already, and an "Anchor Guide" for those needing more math support.
+*   **Real-World Scenarios:** Never use abstract numbers (e.g., "x = 5"). Use scenarios (e.g., "Revenue dropped by 10% in Q3... why?").
+*   **Breakout Rooms:** Adults can be introverted; structured breakout tasks reduce pressure during group work.
+
+---
+
+### **7. Post-Workshop Support (The 8-Week Bridge)**
+*Completion does not guarantee employment; community does.*
+*   **Week 1-2:** Weekly 30-minute Q&A calls for troubleshooting code.
+*   **Week 4:** Guest speaker from HR/Tech Recruiter on what they look for in portfolios.
+*   **Week 6:** Portfolio review session (peer-to-peer feedback).
+*   **Ongoing:** Access to a private Discord/Slack channel for job postings and networking.
+
+---
+
+### **8. Resource & Tech Requirements**
+*   **Hardware:** Participants need their own laptops with at least 8GB RAM.
+*   **Software:**
+    *   Anaconda Distribution (Python)
+    *   PostgreSQL / Docker (or cloud-based SQL like BigQuery Sandbox)
+    *   VS Code or Jupyter Lab
+    *   PowerBI Desktop / Tableau Public
+*   **Data Repositories:** Kaggle, Google Dataset Search, GitHub "Awesome Datasets."
+
+### **9. Success Metrics (KPIs)**
+1.  **Completion Rate:** >85% of attendees finish the Capstone Project.
+2.  **Satisfaction Score:** Net Promoter Score (NPS) >70 from learners.
+3.  **Job Readiness:** Post-workshop survey: "Do you feel confident applying for junior roles?"
+4.  **Placement Rate:** Tracking how many secure an interview or role within 90 days (optional long-term metric).
+
+---
+
+### **10. Risk Management**
+*   **Risk:** Technical setup takes too long on Day 1.
+    *   *Mitigation:* Provide pre-loaded cloud environments (e.g., Google Colab, DataCamp Workspace) so no installation is required on laptops.
+*   **Risk:** Low math anxiety causing dropout.
+    *   *Mitigation:* Frame statistics as "tools" rather than "calculus." Emphasize Python libraries do the heavy lifting; focus on *interpretation* of results.
+*   **Risk:** Learners get overwhelmed by scope.
+    *   *Mitigation:* Strict time-boxing. Focus is on *Generalist Data Analyst*, not Specialist Engineer or Data Scientist, to keep the career goal attainable.

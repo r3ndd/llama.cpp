@@ -1,0 +1,47 @@
+### The Scenario
+To understand the comparison, first visualize the **Trolley Problem**:
+A runaway trolley is speeding down a track toward five people who are tied up and cannot move. You are standing next to a lever. If you pull the lever, the trolley switches tracks to a side track where it will kill only one person. If you do nothing, the trolley kills the five people.
+
+**The Question:** Do you pull the lever?
+
+Here is how **Utilitarianism** and **Deontology** answer that question differently.
+
+---
+
+### 1. Utilitarian Response (The Calculator)
+**Core Idea:** The morality of an action depends entirely on its **results**. The right choice is the one that creates the most happiness or saves the most lives.
+
+*   **The Math:** A utilitarian simply counts the number of people saved versus the number lost. Five lives lost vs. One life lost.
+*   **The Decision:** **Pull the lever.**
+*   **The Reasoning:** It is morally necessary to minimize the total amount of suffering and death. Letting five people die when one could be sacrificed is a failure to do the "greatest good for the greatest number." The one person’s death is a tragic tragedy, but it is the lesser evil compared to the deaths of five.
+
+**In short:** The end (saving five lives) justifies the means (killing one person).
+
+---
+
+### 2. Deontological Response (The Rule-Keeper)
+**Core Idea:** The morality of an action depends on **rules and duties**. Certain actions are inherently right or wrong, regardless of the consequences. Humans have rights that should never be violated.
+
+*   **The Rule:** You have a strict duty not to kill an innocent person. A person cannot be used as a tool or sacrifice to help others.
+*   **The Decision:** **Do not pull the lever.**
+*   **The Reasoning:** Pulling the lever makes you an active participant in the death of the one person. You would be *causing* that death intentionally. Even though the result is worse (five die), the act of intervening violates the moral rule against killing. Letting five people die is tragic, but pulling the lever makes you a murderer.
+
+**In short:** You cannot commit a wrongful act (killing) just to achieve a good outcome (saving lives).
+
+---
+
+### Side-by-Side Comparison
+
+| Feature | Utilitarianism | Deontology |
+| :--- | :--- | :--- |
+| **Focus** | Consequences (The Outcome) | Duty (The Action) |
+| **Key Question** | "What saves the most people?" | "Am I violating a moral rule?" |
+| **View on the One Person** | A statistic in the equation. | An individual with rights that cannot be traded. |
+| **Decision** | Pull the lever (Save 5). | Do not pull (Don't kill the 1). |
+| **Metaphor** | **The Accountant:** Balancing a ledger of lives. | **The Lawmaker:** Following an absolute law against murder. |
+
+### The Fundamental Difference
+The conflict comes down to how they view responsibility:
+
+*   **Utilitarians** see you as responsible for what happens *to the world*. If you can stop the deaths, you have a duty to do so. Inaction is just as bad as action if it results in more suffering.
+*   **Deontologists** see you as responsible for your *own actions*. You are only morally accountable for what you choose to *do*, not for things that simply happen around you. By pulling the lever, you change from a bystander into an agent of death.

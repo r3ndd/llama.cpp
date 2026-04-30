@@ -1,0 +1,56 @@
+### Definition of Nash Equilibrium
+
+A **Nash equilibrium** is a concept in game theory where no player can benefit by changing their strategy while the other players keep theirs unchanged.
+
+In simpler terms, it is a "stable state" in a competition or interaction. Once everyone is playing a Nash equilibrium, every participant realizes that sticking with their current plan is the best option they have, given what everyone else is doing. If you try to switch strategies alone, you will end up worse off (or at best, the same).
+
+It assumes rational players who want to maximize their own payoff and are aware of how others act.
+
+---
+
+### A Simple Two-Player Game: The Prisoner's Dilemma
+
+The classic example used to explain this is the **Prisoner’s Dilemma**. Imagine two suspects, Alice and Bob, are arrested for a crime. The police don't have enough evidence for a major conviction but have enough for a minor charge. They are interrogated separately and cannot communicate.
+
+**The Rules:**
+1.  **Choices:** Each player can choose to **Cooperate** (Stay Silent) or **Defect** (Confess/Blame the other).
+2.  **Payoffs:** The numbers below represent "years in jail" (lower is better, but let's convert them into **Utility Points**, where higher is better).
+
+| | **Bob Cooperates** (Stays Silent) | **Bob Defects** (Confesses) |
+| :--- | :---: | :---: |
+| **Alice Cooperates** (Stay Silent) | Alice: 3 pts, Bob: 3 pts | Alice: 0 pts, Bob: 5 pts |
+| **Alice Defects** (Confess) | Alice: 5 pts, Bob: 0 pts | Alice: 1 pt, Bob: 1 pt |
+
+*(Note: 3/3 = Both go free on a minor charge. 5/0 = Free man goes home while the other takes the fall. 1/1 = Both get a moderate sentence due to lack of cooperation).*
+
+**Finding the Equilibrium:**
+Let's analyze Alice's decision based on what she thinks Bob will do:
+*   **If Bob Cooperates:** Alice can get **3 pts** by cooperating or **5 pts** by defecting. She should Defect.
+*   **If Bob Defects:** Alice can get **0 pts** by cooperating or **1 pt** by defecting. She should still Defect.
+
+No matter what Bob does, Alice's best move is to **Defect**. By symmetry, the same logic applies to Bob. He also has no reason to cooperate regardless of what Alice does.
+
+**The Nash Equilibrium:**
+Both players choose to **Defect**, resulting in a payoff of **(1 pt, 1 pt)**.
+Even though they would both be happier if they *both* Cooperated (3 pts each), the fear that the other might Defect drives them to the stable outcome where everyone defects. No one has an incentive to unilaterally change their mind and switch to "Cooperate" because doing so would result in getting nothing (0 pts).
+
+---
+
+### Why Nash Equilibrium Matters
+
+Nash equilibrium is crucial because it helps us predict human behavior in strategic situations where your success depends on others' actions. Here is why it matters:
+
+**1. Economic Stability and Pricing**
+In oligopolies (markets with few large companies), businesses constantly adjust prices. A Nash equilibrium helps economists understand when a price war will stop. If Company A lowers prices, Company B might match them to survive. Once they hit the lowest viable price, neither side wants to lower it further (they'd lose money), creating a stable market price that benefits consumers but hurts company profits.
+
+**2. International Relations and Arms Races**
+Nations in conflict often find themselves in a Nash equilibrium regarding military spending. If Nation A builds weapons, Nation B feels threatened and builds more. If Nation A stops building weapons to save money, they risk being defenseless against Nation B. Therefore, both keep arming even if it is expensive for the global economy.
+
+**3. Evolutionary Biology**
+Biologists use "Evolutionarily Stable Strategies" (a form of Nash equilibrium) to explain animal behavior. For example, why do some animals fight to the death while others retreat? An animal species will settle on a behavioral strategy where no individual can gain an evolutionary advantage by changing its instinctive response to a threat.
+
+**4. It Distinguishes "Best" from "Stable"**
+Perhaps most importantly, Nash equilibrium teaches us that a rational outcome isn't always the most *efficient* one. In the Prisoner's Dilemma, the equilibrium (1 point each) is worse than cooperation (3 points each). This explains why free markets often fail without regulation, and why trust is so hard to build in negotiations—individual incentives often lead to group failures.
+
+**Summary:**
+A Nash equilibrium isn't necessarily a "good" result for everyone; it is simply a result that nobody wants to break. Understanding this helps policymakers design rules (incentives or punishments) that shift the players toward outcomes that benefit society as a whole, like the "Cooperate/Cooperate" outcome in the example above.

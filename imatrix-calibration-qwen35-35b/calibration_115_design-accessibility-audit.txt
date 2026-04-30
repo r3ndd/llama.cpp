@@ -1,0 +1,78 @@
+Here is a practical outline for an accessibility audit process tailored to a public-sector website. Public-sector audits require stricter adherence to legal compliance (e.g., Section 508, ADA, AODA, PRA) and emphasize long-term governance over one-time fixes.
+
+### Phase 1: Preparation & Scoping
+Before testing begins, establish the rules of engagement to ensure legal defensibility and operational feasibility.
+
+*   **1. Define Legal Standards:** Determine the exact requirement based on jurisdiction (e.g., WCAG 2.1 Level AA is the global standard for Section 508).
+*   **2. Establish Scope:**
+    *   Will this cover the entire domain or specific high-traffic portals (e.g., benefits application, tax forms)?
+    *   Does it include mobile apps and third-party embedded widgets (maps, video players)?
+*   **3. Stakeholder Alignment:** Secure buy-in from Legal, IT, Content Management, and Procurement teams to ensure remediation resources are available.
+*   **4. Select Tools:** Prepare a mix of automated tools and manual testing environments (e.g., JAWS/NVDA/VoiceOver, Chrome Developer Tools).
+
+### Phase 2: Discovery & Automated Scanning
+Capture broad baseline data quickly. This identifies "low-hanging fruit" but is not sufficient for compliance on its own.
+
+*   **5. Crawl the Site:** Run automated crawlers (e.g., Axe, WAVE, Lighthouse) against key landing pages and critical user journeys.
+*   **6. Identify Patterns:** Group errors by type rather than page (e.g., "All PDF forms have missing metadata," "Nav bars lack ARIA labels").
+*   **7. Baseline Metrics:** Record the number of automated errors and generate a "Before" score for future comparison.
+
+### Phase 3: Manual Testing & Human Verification
+Automation catches ~50% of issues. Public sector audits must prioritize the other 50% requiring human judgment and assistive technology verification.
+
+*   **8. Keyboard-Only Navigation:**
+    *   Traverse all interactive elements using `Tab`, `Enter`, `Space`, and arrow keys only.
+    *   Verify focus indicators are visible on all states (hover, active, visited).
+    *   Check for "keyboard traps" (users unable to move away from a component).
+*   **9. Screen Reader Testing:**
+    *   Test critical workflows (e.g., applying for a permit) using NVDA (Windows) or VoiceOver (Mac/iOS).
+    *   Listen for logical reading order, meaningful heading structures (`H1`–`H6`), and accurate Alt Text on images.
+*   **10. Color & Visual Inspection:**
+    *   Verify text contrast ratios meet 4.5:1 (normal text) and 3:1 (large text).
+    *   Ensure information is not conveyed by color alone (e.g., error messages must include icons + text).
+    *   Check zoom functionality up to 200% without breaking layout or cutting off text.
+*   **11. Content & Forms Review:**
+    *   Check PDFs/Word docs for proper tagging and OCR.
+    *   Test form inputs for error identification (linked programmatically).
+    *   Verify language attributes (`lang="en"`) on page load.
+
+### Phase 4: Analysis & Prioritization
+Don't simply list every error; prioritize based on user impact and effort to fix.
+
+*   **12. Categorize Deficiencies:**
+    *   **Critical (Blocker):** Prevents access entirely (e.g., Login form unusable).
+    *   **Major:** Makes content difficult to perceive (e.g., poor contrast, missing links).
+    *   **Minor:** Aesthetic or minor structural issues (e.g., image size variations).
+*   **13. Map to WCAG:** Tag each error with its specific Success Criterion (SC) ID (e.g., `2.4.7 Focus Visible`). This is often required for legal documentation.
+*   **14. Create the Remediation Plan:** Assign ownership (Developer vs. Content Editor). Set realistic deadlines based on criticality.
+
+### Phase 5: Reporting & Transparency
+Public sector entities must demonstrate due diligence and open communication with citizens.
+
+*   **15. Executive Summary:** Provide a high-level overview for leadership focusing on risk, compliance status, and budget impact.
+*   **16. Technical Report:** Detailed findings for the engineering team, including code snippets and reproduction steps.
+*   **17. Publish an Accessibility Statement:** Publicly state the conformance level, known limitations (e.g., a legacy PDF form), and contact information for reporting accessibility issues.
+*   **18. Feedback Mechanism:** Ensure there is a dedicated "Accessibility Feedback" form or phone line where citizens can report barriers they encounter.
+
+### Phase 6: Remediation & Re-testing
+Verification is required to confirm fixes work before closing the audit loop.
+
+*   **19. Triage Sprints:** Fix Critical issues immediately (often within weeks). Schedule Major/Minor issues into standard development sprints.
+*   **20. Regression Testing:** Re-run automated scans after every deployment to ensure no new accessibility barriers were introduced.
+*   **21. Validation:** Have a qualified auditor (internal or external) sign off on the "Before" vs. "After" status for Critical issues.
+
+### Phase 7: Governance & Sustainability
+In the public sector, the goal is not just fixing the current site, but ensuring future compliance.
+
+*   **22. Procurement Policy:** Update procurement contracts to mandate accessibility (WCAG) as a requirement for any third-party software vendors before purchase.
+*   **23. Content Training:** Train content editors on accessible writing (plain language, describing links in context) and image uploading practices.
+*   **24. Continuous Monitoring:** Automate accessibility checks within the CI/CD pipeline (e.g., blocking deployment if high-severity errors are introduced).
+*   **25. Annual Review:** Re-audit annually or when a significant content overhaul occurs to maintain legal compliance standing.
+
+---
+
+### Recommended Tools Checklist
+*   **Automation:** WAVE, axe DevTools, Google Lighthouse.
+*   **Screen Readers:** NVDA (free), JAWS (paid), VoiceOver (built-in).
+*   **Color Contrast:** WebAIM Contrast Checker, Stark Plugin.
+*   **PDF Testing:** Adobe Acrobat Pro (Accessibility Checkers), PAC 3.

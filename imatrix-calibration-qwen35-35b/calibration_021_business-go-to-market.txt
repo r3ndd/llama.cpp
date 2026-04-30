@@ -1,0 +1,73 @@
+Here is a lightweight, execution-focused Go-To-Market (GTM) plan designed for a B2B SaaS startup launching an AI meeting-notes product. This plan prioritizes speed, low cost, and founder-led growth.
+
+### 1. Product Definition & Value Proposition
+**The Problem:** Teams waste hours typing notes, lose track of action items, and cannot search past discussions.
+**The Solution:** Automated transcription, context-aware summarization, and direct integration with task management tools (Jira, Linear, Asana).
+**The Hook:** *"Turn meetings into actionable tasks in seconds."*
+**Differentiation:** Privacy-first architecture, superior semantic search over basic keywords, or deep workflow automation (e.g., auto-create Jira tickets from specific phrases).
+
+### 2. Ideal Customer Profile (ICP)
+Don't target "everyone." Target segments with high meeting volume and budget.
+*   **Primary ICP:** High-growth Tech Startups (50–500 employees).
+    *   *Buyer Persona:* CTO, Head of Engineering, VP of Sales, or Project Managers.
+*   **Why:** They value time over money, use complex tool stacks, and are early adopters of AI.
+
+### 3. Pricing Strategy
+Keep it simple to reduce friction.
+*   **Free Tier:** 5 meetings/month + basic transcription (Lead Magnet).
+*   **Pro Tier ($19/user/mo):** Unlimited transcription, AI summaries, Jira/Linear integration.
+*   **Team Tier ($49/user/mo):** Admin controls, audit logs, shared knowledge base.
+*   *Strategy:* Use the Free Tier as a product trial rather than just a freemium trap to gather user data and case studies.
+
+### 4. Phased Launch Timeline (3-Month Sprint)
+
+#### Phase 1: Pre-Launch (Weeks 1-4)
+*Goal: Validate demand and secure 100 beta users.*
+*   **Waitlist:** Build a simple landing page with a demo video. Run targeted LinkedIn ads ($500 budget) targeting "CTO" or "Product Manager."
+*   **Beta Program:** Recruit 50 power users from your personal network in exchange for free lifetime plans in return for testimonials and feedback.
+*   **Integration First:** Ensure the product works seamlessly with Zoom, Google Meet, and Microsoft Teams before talking to anyone.
+
+#### Phase 2: Soft Launch (Weeks 5-8)
+*Goal: Drive initial traffic and validate conversion.*
+*   **Product Hunt:** Schedule a launch for a Tuesday/Wednesday morning. Have beta users upvote immediately upon drop.
+*   **Direct Outreach:** Founders should manually reach out to 100 specific prospects on LinkedIn (e.g., Engineering VPs at Series B startups). Offer a personalized "demo audit" of one past meeting.
+*   **Content Loop:** Publish 3 case studies from the Beta group (e.g., *"How [Company X] saved 10 hours/week using our tool"*).
+
+#### Phase 3: Full Launch & Scale (Weeks 9-12)
+*Goal: Accelerate acquisition.*
+*   **Referral Program:** Give users 1 month free for every teammate they invite who converts. This lowers CAC significantly.
+*   **Content Marketing:** Post daily on X (Twitter) and LinkedIn about "Meeting Hygiene" or AI productivity hacks to drive inbound traffic.
+*   **Partnerships:** Reach out to B2B SaaS consultants/Agencies. Offer them a commission if they recommend your tool to their clients.
+
+### 5. Key Channels (Focus on ROI)
+1.  **Cold Email (Outbound):** Use tools like Apollo or Instantly. Focus on "Value-first" emails, not sales pitches.
+    *   *Subject:* "Meeting notes for [Company Name]"
+    *   *Body:* "Noticed you run a lot of standups. We helped [Competitor/Peer] automate theirs. Open to a 5-min demo?"
+2.  **SEO (Inbound):** Optimize for "AI transcription for Teams" and specific workflow terms ("Summarize Jira tickets from Zoom").
+3.  **Integrations:** Build an integration partner badge in your directory. If you integrate with Notion or Slack, their users see you on the store pages.
+
+### 6. Conversion Funnel Optimization
+To ensure visitors pay:
+1.  **Frictionless Onboarding:** Allow login via Google SSO only. No credit card required for the Free Tier.
+2.  **"Aha" Moment in <5 Minutes:** Force users to upload a meeting recording (or join via calendar invite) *immediately* after sign-up so they see the AI summarize it live.
+3.  **The Paywall Trigger:** Lock the "Actionable Export" (e.g., exporting notes to Word or Jira) behind the paid tier, while keeping viewing free.
+
+### 7. Key Performance Indicators (KPIs)
+*   **MRR:** Monthly Recurring Revenue target ($10k MRR by Month 3).
+*   **CAC:** Customer Acquisition Cost (Keep under $200 initially).
+*   **Activation Rate:** % of Sign-ups who complete a meeting (Target: >40%).
+*   **Churn:** Weekly/Monthly churn rate. If high, fix onboarding before fixing acquisition.
+*   **Viral Coefficient:** Number of teammates invited per new free user.
+
+### 8. Risk Mitigation
+| Risk | Mitigation Strategy |
+| :--- | :--- |
+| **Data Privacy Concerns** | Publish a clear data policy (no training on customer data). Get SOC2 compliant eventually, but start with GDPR/CCPA compliance statements. |
+| **High Competition** | Differentiate via *integrations* (e.g., "The only AI that puts meeting notes directly into Linear tickets"). |
+| **Low Engagement** | Send weekly "Digest" emails showing the time saved this week to remind users of the value. |
+
+### Immediate Next Steps (Week 1)
+1.  Finalize the **Free vs. Paid tier** limits.
+2.  Write the **Cold Email script** for Engineering/Product leaders.
+3.  Create a **Loom video** walking through one specific use case (e.g., "From Zoom to Jira").
+4.  Launch the **Waitlist Page** with the Loom embedded.

@@ -7,6 +7,7 @@
 - Never draft AI-style PR descriptions, commit messages, or reviewer replies for contributors.
 - Never commit/push without explicit per-action user approval.
 - Keep support minimal and reviewable; smaller, understandable diffs are preferred.
+- Keep AGENTS knowledge scoped to the nearest relevant directory; avoid duplicating subdirectory-specific notes at the repo root.
 
 ## Quick references
 

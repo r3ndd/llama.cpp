@@ -1,0 +1,58 @@
+Here is the refactored version of the function, followed by a detailed explanation of the changes made to improve readability.
+
+### Refactored Code
+
+```python
+from typing import List
+
+def square_even_numbers(numbers: List[int]) -> List[int]:
+    """
+    Return a list of the squares of all even numbers in the input list.
+    """
+    return [
+        num ** 2
+        for num in numbers
+        if num % 2 == 0
+    ]
+```
+
+### Explanation of Changes
+
+1.  **Descriptive Function Name (`f` → `square_even_numbers`)**
+    *   **Change:** Renamed the function from `f` to `square_even_numbers`.
+    *   **Reason:** Single-letter function names (like `f`) are opaque. A descriptive name tells the reader exactly what the function does without needing to look at the implementation.
+
+2.  **Descriptive Parameter Name (`x` → `numbers`)**
+    *   **Change:** Renamed the argument from `x` to `numbers`.
+    *   **Reason:** `x` is a generic placeholder. `numbers` clarifies that the input is expected to be a collection of numeric values.
+
+3.  **Descriptive Loop Variable (`i` → `num`)**
+    *   **Change:** Changed the list comprehension variable from `i` to `num`.
+    *   **Reason:** `i` is conventionally used for loop indices (integers representing position). Using `num` clarifies that the variable represents the actual value being processed, not its index.
+
+4.  **Type Hints (`List[int]`)**
+    *   **Change:** Added type annotations (`numbers: List[int] -> List[int]`).
+    *   **Reason:** Explicitly stating that the function expects a list of integers and returns a list of integers helps IDEs provide better autocomplete, helps static analysis tools (like `mypy`) catch errors, and documents the expected data types for other developers.
+
+5.  **Docstring**
+    *   **Change:** Added a docstring explaining the function's purpose.
+    *   **Reason:** Documentation is crucial for readability. It allows other developers to understand the intent of the function without reading the code logic.
+
+6.  **Pythonic Operator (`i*i` → `num ** 2`)**
+    *   **Change:** Changed multiplication (`i * i`) to the exponentiation operator (`num ** 2`).
+    *   **Reason:** While `i * i` works, `** 2` is the idiomatic Python way to express "squaring" a number. It reads closer to mathematical notation ("num to the power of 2").
+
+7.  **Formatting and Line Breaks**
+    *   **Change:** Separated the `def` statement from the `return` statement and broke the list comprehension across multiple lines.
+    *   **Reason:** 
+        *   Separating `def` and `return` prevents the logic from being crammed onto a single line.
+        *   Breaking the list comprehension vertically makes the transformation (`num ** 2`) and the condition (`if num % 2 == 0`) distinct. This makes it easier to scan the logic quickly.
+
+### Usage Example
+
+```python
+data = [1, 2, 3, 4, 5, 6]
+result = square_even_numbers(data)
+print(result) 
+# Output: [4, 16, 36]
+```

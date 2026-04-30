@@ -1,0 +1,28 @@
+Here is a simple curriculum map for a 4-week unit. Since you did not specify a subject, I have used **Middle School Science: Ecosystems & Food Webs** as a concrete example. You can easily swap this out with any other topic (e.g., History, Language Arts).
+
+### Unit Title: Living Interactions (Ecosystems)
+*   **Grade Level:** 6–8
+*   **Subject:** Science / Environmental Studies
+*   **Duration:** 4 Weeks
+
+| Week | Learning Objectives (Students will be able to...) | Key Activities (Instructional Strategies) | Assessments (Formative & Summative) |
+| :--- | :--- | :--- | :--- |
+| **Week 1**<br>*(Foundations)* | • **Define** key vocabulary: ecosystem, biotic, abiotic.<br>• **Identify** the components of a local ecosystem.<br>• **Classify** organisms by their roles (producer, consumer, decomposer). | • **Direct Instruction:** Interactive lecture with visual slides.<br>• **Observation:** "Nature Walk" (classroom or virtual) to log abiotic factors.<br>• **Guided Practice:** Sort & Graph activity (categorizing organism cards). | • **Formative:** Vocabulary Matching Quiz.<br>• **Exit Ticket:** Sketch a box diagram showing biotic/abiotic factors of the schoolyard. |
+| **Week 2**<br>*(Energy Flow)* | • **Construct** food chains and webs representing energy transfer.<br>• **Explain** how energy moves through an ecosystem (Pyramid model).<br>• **Predict** what happens to a chain if one link is removed. | • **Model Building:** Create a physical string-tethered food web on the floor.<br>• **Role Play:** Students act as organisms receiving "energy balls."<br>• **Reading:** Case study of a specific local animal habitat. | • **Formative:** Food Web Draft (in-class worksheet).<br>• **Summative (Part 1):** Design-a-Web Project (individual poster). |
+| **Week 3**<br>*(Change & Balance)* | • **Analyze** how natural or human disruptions affect stability.<br>• **Evaluate** the impact of invasive species or climate change.<br>• **Propose** hypotheses on population shifts following a disruption. | • **Simulation:** "The Domino Effect" game where students remove a species and track consequences.<br>• **Socratic Seminar:** Debate on human intervention in nature.<br>• **Lab:** Virtual simulation of predator/prey cycles (software/PhET). | • **Formative:** Simulation Worksheet Analysis.<br>• **Summative (Part 2):** Case Study Report (Write a paragraph answering: *How does pollution impact the water cycle in this system?*). |
+| **Week 4**<br>*(Application)* | • **Apply** knowledge to propose an environmental conservation plan.<br>• **Communicate** scientific findings through oral or written presentation.<br>• **Reflect** on personal responsibility in maintaining ecosystems. | • **Project Work:** Design a "Conservation Campaign" poster or pitch.<br>• **Workshop Peer Review:** Critique other students' plans using a rubric.<br>• **Presentation:** 3-minute "Shark Tank" style pitch for their plan. | • **Summative (Final):** Capstone Conservation Project (10 points).<br>• **Reflection:** Unit Reflection Questionnaire (What did I learn about my role in nature?). |
+
+---
+
+### Alignment Check: The "Golden Thread"
+To ensure the unit is coherent, check that the three columns link logically for every week:
+*   **Week 1:** Can you *Define* it? → Did you *Observe* it? → Is it tested on a *Quiz*? **(Yes)**
+*   **Week 2:** Can you *Construct* it? → Did you *Model* it? → Is it tested on the *Project*? **(Yes)**
+*   **Week 3:** Can you *Analyze* change? → Did you *Simulate* change? → Is it tested on the *Report*? **(Yes)**
+*   **Week 4:** Can you *Apply* knowledge? → Did you *Pitch* a solution? → Is it tested on the *Final Project*? **(Yes)**
+
+### Optional Add-Ons (To include in your final document)
+1.  **Materials List:** Textbook Ch. 4, Cardboard for models, Projector, Lab Safety Gear.
+2.  **Differentiation:**
+    *   *Support:* Provide sentence stems for the Case Study Report; use visual-heavy quizzes.
+    *   *Challenge:* Require data analysis (graphs) in the Conservation Campaign instead of just text.

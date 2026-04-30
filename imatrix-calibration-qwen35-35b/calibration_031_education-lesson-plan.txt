@@ -1,0 +1,77 @@
+# Lesson Plan: The Common Denominator Quest
+**Grade Level:** 5th Grade  
+**Subject:** Mathematics (Fractions)  
+**Duration:** 45 Minutes  
+**Topic:** Adding Fractions with Unlike Denominators (Using Equivalent Fractions)  
+
+---
+
+### 🎯 Learning Objective
+Students will be able to find a common denominator to add two fractions with unlike denominators by using visual models to represent equivalent fractions.
+
+### 🛠 Materials Needed
+*   **Teacher:** Whiteboard, dry-erase markers, large magnetic fraction tiles (or printed on cardstock), "Pizza Order" worksheet.
+*   **Students:** Pairs of hands-on materials: 5 sets of plastic fraction strips OR printable paper fraction strips (halves, thirds, fourths, sixths, eighths), scissors, glue/tape.
+*   **Assessment:** Exit Ticket slips.
+
+---
+
+### 🕒 Lesson Breakdown
+
+#### 1. Warm-Up & Hook (5 Minutes)
+*   **Review (2 mins):** Write $ \frac{1}{4} + \frac{2}{4} = ? $ on the board. Ask a volunteer to solve it and explain *why* they added the numerators but kept the denominator the same. (Key concept: "We are counting pieces of the same size.")
+*   **The Problem (3 mins):** Write this on the board: *"I have $\frac{1}{2}$ of a pizza left for dinner, and my friend has $\frac{1}{4}$ of a pizza left. If we eat it all together, do we have enough to make 1 whole pizza?"*
+    *   Ask students to turn-and-talk. Most will say "Yes" (because $1+1=2$) or be confused.
+    *   Prompt: *"Why can't we just add the pieces right now?"* (Lead them to see they are different sizes).
+
+#### 2. Direct Instruction & Modeling (10 Minutes)
+*   **The Concept of Common Size:** Explain that to add fractions, the "pieces" must be cut into the same size. This is called finding a **Common Denominator**.
+*   **Visual Demonstration:**
+    *   Use your magnetic fraction tiles on the board. Place a $1/2$ tile next to a $1/4$ tile. Ask, *"Are these the same size?"* (No).
+    *   Show a $1/4$ tile next to another $1/4$ tile.
+    *   Ask: *"How many fourths make a half?"* (Use tiles to show two $1/4$s equal one $1/2$).
+    *   Rewrite the equation: $\frac{1}{2}$ becomes $\frac{2}{4}$. Now add $\frac{2}{4} + \frac{1}{4} = \frac{3}{4}$.
+*   **Strategy Tip:** Introduce the phrase **"Unfriendly to Friendly."** If denominators are "unfriendly" (different), we find a "friendly" common size.
+
+#### 3. Hands-On Activity: "The Pizza Shop Challenge" (20 Minutes)
+*   **Setup:** Put students into pairs. Give each pair their set of fraction strips and a worksheet titled "Customer Orders."
+*   **The Task:** Students act as the "Fraction Pizza Maker." They must figure out if two orders match up to make whole pizzas, or just find the total amount.
+    *   **Step 1 (Modeling):** The teacher gives one example on the board ($\frac{1}{3} + \frac{1}{6}$). Students use their strips to cover them. They realize $1/3$ is bigger than $1/6$. How many $1/6$s fit in a $1/3$? Two! So, $\frac{2}{6} + \frac{1}{6} = \frac{3}{6}$ (which simplifies to $\frac{1}{2}$).
+    *   **Step 2 (Practice):** Students work through 4 problems on their sheet. For each problem:
+        1.  Lay out the fraction strips physically.
+        2.  Find a common size strip that matches both fractions (e.g., if they have $1/2$ and $1/3$, find the sixths to match).
+        3.  Rewrite the math sentence using the equivalent fractions.
+        4.  Add the numerators.
+*   **Teacher Role:** Circulate the room. Check that students aren't just counting "two pieces" without aligning them to the same size unit.
+
+#### 4. Closure & Exit Ticket (10 Minutes)
+*   **Review (5 mins):** Call on a student to explain how they solved one of the problems in the activity. Ask: *"Why did you change $\frac{1}{2}$ to $\frac{6}{12}$ instead of just adding?"* Reiterate that we are counting pieces of the same size.
+*   **Exit Ticket (5 mins):** Students complete a slip before leaving class.
+
+---
+
+### 🧾 The Exit Ticket (To be distributed on a small slip)
+
+**Name:** __________________________  **Date:** _______________
+
+**Part A: The Math (Solve one problem)**
+Find the common denominator and add the fractions below:
+$$ \frac{1}{4} + \frac{2}{8} = $$
+*(Hint: Turn $\frac{1}{4}$ into "eighths" first!)*
+Answer: ______________
+
+**Part B: The Reasoning (Think & Write)**
+Why do we need to find a common denominator before adding fractions?
+_________________________________________________________________________
+_________________________________________________________________________
+
+---
+
+### 💡 Differentiation Strategies
+
+*   **For Support:** Provide students with fraction tiles pre-cut and laminated so they don't struggle with cutting. Provide a "cheat sheet" showing multiples (e.g., 4, 8, 12) to help them find common denominators.
+*   **For Challenge:** Ask advanced students to add three fractions ($\frac{1}{3} + \frac{1}{4} + \frac{1}{2}$) or convert their final answer into a mixed number.
+
+### 🛠 Assessment Checkpoints
+*   **Formative:** During the "Hands-On Activity," circulate and check that students are physically aligning the strips to see the equivalence before writing the numbers down.
+*   **Summative:** Grade the Exit Tickets to ensure students can write the equivalent fraction step correctly (Part A) and understand the conceptual "why" (Part B).

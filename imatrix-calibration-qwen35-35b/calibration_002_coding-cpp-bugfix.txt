@@ -1,0 +1,127 @@
+When accessing `vec[i+1]` inside a loop in C++, a common crash occurs if `i` reaches the last index of the vector, causing an out-of-bounds access. This is a classic undefined behavior that can lead to runtime crashes, memory corruption, or security vulnerabilities.
+
+---
+
+### 🔍 Root Cause
+
+```cpp
+for (size_t i = 0; i < vec.size(); ++i) {
+    // vec[i+1] may access memory beyond the vector's bounds
+    if (vec[i+1] > vec[i]) { ... }
+}
+```
+
+If `i == vec.size() - 1`, then `vec[i+1]` is invalid. This is undefined behavior in C++.
+
+---
+
+### ✅ Safe Fixes
+
+#### 1. Adjust Loop Bounds (Most Common Fix)
+
+```cpp
+for (size_t i = 0; i + 1 < vec.size(); ++i) {
+    if (vec[i+1] > vec[i]) { ... }
+}
+```
+
+- Ensures `i+1` remains within bounds.
+- Simple and efficient.
+
+#### 2. Use `std::adjacent_find` (Modern C++)
+
+```cpp
+auto it = std::adjacent_find(vec.begin(), vec.end(),
+    [](int a, int b) { return a < b; });
+if (it != vec.end()) {
+    // Found a pair where next > current
+}
+```
+
+- No manual index tracking.
+- Clear intent: find adjacent elements satisfying a condition.
+
+#### 3. Use `std::pair` or `std::views::zip` (C++20)
+
+```cpp
+#include <ranges>
+
+for (const auto& [current, next] : vec | std::views::zip(vec, vec | std::views::drop(1))) {
+    if (next > current) { ... }
+}
+```
+
+- Elegant, readable, and bounds-safe.
+- Requires C++20 and `<ranges>`.
+
+#### 4. Bounds-Checked Access with `at()` (Slower but Safer)
+
+```cpp
+for (size_t i = 0; i + 1 < vec.size(); ++i) {
+    if (vec.at(i+1) > vec.at(i)) { ... }
+}
+```
+
+- Adds runtime bounds checking.
+- Useful for debugging or safety-critical code.
+- Slightly slower than `[]`.
+
+---
+
+### ⚠️ Edge Cases to Consider
+
+| Scenario                      | Behavior with Unsafe Code | Safe Fix Required? |
+|------------------------------|---------------------------|--------------------|
+| Empty vector (`vec.size() == 0`) | Loop doesn't execute     | ✅ Yes             |
+| Single element (`size() == 1`)   | `i+1` out of bounds      | ✅ Yes             |
+| Large vectors                      | Memory corruption risk   | ✅ Yes             |
+| Multithreaded access             | Race conditions possible | ✅ Yes             |
+| Mutable iterators during loop    | Undefined behavior       | ✅ Yes             |
+
+---
+
+### 🛡️ Best Practices
+
+1. **Always check bounds** before accessing `vec[i+1]` or similar.
+2. **Prefer range-based loops** or STL algorithms over manual indexing.
+3. **Use `size_t` for indices** to avoid signed/unsigned issues.
+4. **Enable compiler warnings** (`-Wall -Wextra`) and sanitizers (`-fsanitize=address`).
+5. **Consider using `std::span`** (C++20) for safer, non-owning views of containers.
+6. **Use `std::optional` or `std::expected`** when a next element might not exist.
+
+---
+
+### ✅ Recommended Pattern
+
+```cpp
+bool hasIncreasingPair(const std::vector<int>& vec) {
+    if (vec.size() < 2) return false;
+
+    for (size_t i = 0; i + 1 < vec.size(); ++i) {
+        if (vec[i+1] > vec[i]) return true;
+    }
+    return false;
+}
+```
+
+This pattern is:
+- Safe
+- Clear
+- Efficient
+- Compatible with all C++ standards
+
+---
+
+### 🧰 Tools for Debugging
+
+- **AddressSanitizer**: Detects out-of-bounds access
+  ```bash
+  g++ -fsanitize=address -g code.cpp
+  ```
+- **UndefinedBehaviorSanitizer (UBSan)**
+- **Valgrind**
+- **Compiler Warnings**: `-Wall -Wextra -Werror`
+
+---
+
+By following these practices, you can eliminate undefined behavior, improve code safety, and write more maintainable C++ programs.

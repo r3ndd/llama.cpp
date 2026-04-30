@@ -1,0 +1,102 @@
+**Disclaimer:** *This document serves as a strategic template and high-level framework. It does not constitute legal advice. Cybersecurity breach notification laws vary significantly by jurisdiction (e.g., GDPR, CCPA/CPRA, NYDFS, SEC Regulations). You must have this policy reviewed and approved by your Legal Counsel and Compliance Officers before implementation.*
+
+***
+
+# Incident Disclosure & Communication Policy
+
+**Policy Owner:** [Chief Information Security Officer / General Counsel]
+**Effective Date:** [Date]
+**Version:** 1.0
+**Approved By:** [Board of Directors / Executive Leadership Team]
+
+---
+
+## 1. Purpose
+The purpose of this policy is to establish a structured, transparent, and compliant framework for communicating regarding cybersecurity incidents involving sensitive data or critical systems. This policy aims to:
+*   Ensure timely notification to regulators, affected individuals, and partners in accordance with legal obligations.
+*   Protect the organization's reputation through consistent messaging.
+*   Minimize liability and maintain stakeholder trust.
+
+## 2. Scope
+This policy applies to all employees, contractors, temporary workers, and third-party vendors acting on behalf of **[Organization Name]**. It covers all systems, networks, devices, and data (on-premise, cloud, or hybrid) that store or process organizational information.
+
+## 3. Governance: The Disclosure Committee
+In the event of a **Significant Security Incident**, the **Incident Response Team (IRT)** must immediately convene a **Cross-Functional Disclosure Committee**.
+
+**Committee Composition:**
+*   **Executive Sponsor:** [CEO / COO] (Final decision authority on public messaging).
+*   **Legal & Compliance:** [General Counsel / CCO] (Determines legal notification obligations and timing).
+*   **Security Lead:** [CISO / Director of InfoSec] (Provides technical facts, root cause, and remediation status).
+*   **Communications Lead:** [Head of PR / Corporate Comms] (Drafts public statements and manages media inquiries).
+*   **HR Lead:** If employee data is involved.
+*   **Customer Success/Account Management:** If client impact is identified.
+
+**Authority:** The **Legal & Compliance Officer** holds veto power regarding the timing of regulatory notifications. The **Executive Sponsor** holds veto power regarding public press statements.
+
+## 4. Incident Classification & Disclosure Triggers
+Disclosure decisions are based on the severity of the incident and the type of data compromised.
+
+| Classification | Definition | Disclosure Requirement |
+| :--- | :--- | :--- |
+| **Critical** | PII, PHI, financial data, or intellectual property breached; System disruption > 24 hrs. | Mandatory Notification (Regulatory & Affected Users). |
+| **High** | Credential theft, internal network access without data exfiltration. | Internal Review; External Notification if risk to clients is probable. |
+| **Low** | Isolated attempt, blocked, no data access. | Internal Log Only; No external disclosure required. |
+
+## 5. Notification Timelines & Obligations
+Timelines are based on standard regulatory requirements (e.g., GDPR Art 33/34, NYDFS 500, SEC Rules). **[Organization Name]** must verify these against its specific operating jurisdictions.
+
+*   **Regulatory Bodies:** Notified within [24 / 72 / 4] hours of confirmation that a breach requires reporting.
+*   **Affected Individuals (Customers):** Contacted without unreasonable delay (typically within 30 days), with guidance to mitigate potential harm.
+*   **Credit Bureaus / Financial Regulators:** Notified according to specific industry mandates (e.g., NCUA, OCC).
+*   **SEC (Public Companies):** If the incident is "material," a Form 8-K may be required within [4] business days.
+
+## 6. Communication Guidelines
+
+### 6.1. The "One Voice" Protocol
+To prevent rumors and misinformation, all external inquiries must be directed solely to the Corporate Communications Department.
+*   **Employees:** Are strictly prohibited from posting on social media (LinkedIn, X/Twitter, etc.) regarding the incident until an official statement is released.
+*   **Media:** All media inquiries are routed to [Contact Email/Phone].
+
+### 6.2. Content Standards
+All notifications must adhere to the following principles:
+*   **Accuracy:** Do not speculate on the timeline or scope of the attack before it is confirmed by Security.
+*   **Transparency:** Acknowledge what happened clearly without minimizing the impact.
+*   **Action-Oriented:** Focus on steps taken and steps users can take (e.g., "Change password," "Monitor accounts").
+*   **Support:** Provide a dedicated toll-free number and web page for support inquiries.
+
+### 6.3. Notification Template Structure
+External notifications to individuals must include:
+1.  Date of discovery and estimated timeframe of the incident.
+2.  Types of data involved (e.g., Name, Email, SSN).
+3.  Action taken by **[Organization Name]** to secure systems.
+4.  Steps the individual should take to protect themselves.
+5.  Contact information for **[Organization Name]** and credit monitoring services provided.
+
+## 7. Third-Party & Partner Notification
+*   **Vendors:** If the breach originated from a vendor or impacts their data, they must be notified immediately per Master Service Agreements (MSA).
+*   **Business Partners:** Notify key business partners directly if the incident disrupts service delivery to them.
+
+## 8. Post-Incident Review
+Following the resolution of the incident and all mandatory notifications, the Disclosure Committee shall conduct a "Post-Mortem" within [30] days.
+*   **Evaluate:** Was the timeline met? Did the messaging cause unnecessary panic? Were regulators satisfied with our cooperation?
+*   **Update:** Modify this policy based on lessons learned and changes in legislation.
+
+## 9. Training & Drills
+This policy will be integrated into the Incident Response Plan. Tabletop exercises involving Legal, Communications, and Security must be conducted at least **[Annually]** to test notification workflows and timelines.
+
+## 10. Compliance Statement
+Failure to adhere to this policy may result in disciplinary action up to and including termination, as well as legal liability for [Organization Name] and the individual involved.
+
+***
+
+### *Appendices*
+*   **Appendix A:** Regulatory Contact List (By Jurisdiction)
+*   **Appendix B:** Pre-Drafted Press Release Templates (Critical/High/Low)
+*   **Appendix C:** Customer Notification Email Template
+
+---
+
+### **Implementation Notes for the Organization:**
+1.  **Legal Review:** Before deploying, have your legal counsel review Section 5 to ensure timelines match GDPR (EU), CCPA (California), or other local laws where you operate.
+2.  **Stockholders:** If this is a publicly traded company, coordinate with Investor Relations immediately, as material breaches often require stock market disclosure.
+3.  **Counsel Retainer:** Ensure your Legal Counsel has been granted access to the "Emergency" contact list so they can be reached within minutes of an incident being confirmed.

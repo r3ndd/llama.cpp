@@ -1,0 +1,91 @@
+To optimize queries that filter by `user_id` and `created_at` (especially with date ranges), a well-designed indexing strategy is essential for performance. Below are recommended strategies based on typical query patterns and database considerations.
+
+---
+
+### 🔑 Recommended Indexes
+
+#### 1. Composite Index (Most Common Case)
+```sql
+CREATE INDEX idx_user_date ON table_name (user_id, created_at);
+```
+- Ideal for queries like:
+  ```sql
+  SELECT * FROM table_name 
+  WHERE user_id = ? 
+    AND created_at BETWEEN ? AND ?;
+  ```
+- Supports efficient filtering and sorting by `created_at` within each `user_id`.
+
+#### 2. Composite Index with Status
+```sql
+CREATE INDEX idx_user_date_status ON table_name (user_id, created_at, status);
+```
+- Useful when `status` is frequently filtered:
+  ```sql
+  SELECT * FROM table_name 
+  WHERE user_id = ? 
+    AND created_at BETWEEN ? AND ? 
+    AND status = 'active';
+  ```
+- Enables covering index if `status` is in SELECT or WHERE.
+
+#### 3. Covering Index (For High Performance)
+```sql
+CREATE INDEX idx_user_date_covering ON table_name (user_id, created_at) 
+INCLUDE (status);  -- For SQL Server
+-- Or include all needed columns in the index
+```
+- Eliminates table lookups by including all necessary columns in the index.
+- Best for read-heavy workloads with consistent column access.
+
+---
+
+### 📊 Index Strategy by Query Pattern
+
+| Query Pattern                                  | Recommended Index                            |
+|-----------------------------------------------|----------------------------------------------|
+| Filter by `user_id` + `created_at` range       | `(user_id, created_at)`                      |
+| Filter by `user_id` + `created_at` + `status`  | `(user_id, created_at, status)`              |
+| Sort results by `created_at` per user          | `(user_id, created_at)`                      |
+| Covering queries (no table lookup needed)      | Include all needed columns in index          |
+
+---
+
+### ⚙️ Additional Optimization Tips
+
+- **Column Order**: Always place the most selective column first (`user_id` typically has higher selectivity than `created_at`).
+- **Query Order**: Ensure the WHERE clause matches the index column order.
+- **Covering Index**: If you only select specific columns, include them in the index to avoid table access.
+- **Index Maintenance**:
+  ```sql
+  -- Check index usage
+  SHOW INDEX FROM table_name;
+
+  -- Monitor performance
+  EXPLAIN SELECT ... WHERE user_id = ? AND created_at BETWEEN ? AND ?;
+  ```
+- **Avoid Over-Indexing**: Each index adds write overhead. Only add indexes that improve frequent queries.
+- **Consider Partitioning**: If data is large and time-based (e.g., per month/year), consider table partitioning on `created_at`.
+- **Database-Specific Features**:
+  - **PostgreSQL**: Consider `BRIN` indexes for large time-series data.
+  - **MySQL**: Use `EXPLAIN` to verify index usage.
+  - **SQL Server**: Use `INCLUDE` for covering indexes.
+  - **Oracle**: Use function-based or bitmap indexes if applicable.
+
+---
+
+### ✅ Example Usage
+
+```sql
+-- Typical query
+SELECT * FROM table_name 
+WHERE user_id = 123 
+  AND created_at BETWEEN '2024-01-01' AND '2024-12-31'
+  AND status = 'active';
+
+-- With composite index (user_id, created_at, status), this query uses the index efficiently.
+```
+
+---
+
+By aligning your indexing strategy with your most common query patterns, you can significantly improve query performance while minimizing maintenance overhead.

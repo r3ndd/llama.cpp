@@ -1,0 +1,115 @@
+Here is a structured outline for a **simple 12-month financial model** tailored for an e-commerce startup. This structure is designed to be built in Excel or Google Sheets, focusing on monthly granularity and the core drivers you requested.
+
+### Model Overview
+*   **Timeframe:** Months 1–12 (Jan – Dec).
+*   **Logic:** Driver-based (Assumptions drive the Revenue/Expense numbers, rather than manual entry).
+*   **Key Outputs:** P&L Statement, Cash Burn Rate, CAC, LTV, and Churn.
+
+---
+
+### Section 1: Key Assumptions (The "Input" Tab)
+*Do not put hard numbers in your expense rows; keep all variables here.*
+
+**A. Traffic & Conversion**
+1.  **Monthly Organic Visitors:** Projected unique visitors per month.
+2.  **Paid Traffic Cost Per Click (CPC):** Average cost to acquire a click by channel.
+3.  **Conversion Rate (%):** Percentage of visitors who make a purchase.
+4.  **Average Order Value (AOV):** $ value per transaction.
+
+**B. Unit Economics**
+5.  **Product Cost Per Unit:** Wholesale/manufacturing cost.
+6.  **Shipping Cost Per Order:** Logistics cost to deliver one box.
+7.  **Payment Processing Fee (%):** % charged by Stripe/PayPal/Shopify.
+8.  **Return Rate (%):** Estimated percentage of sales returned/refunded.
+
+**C. Marketing & Growth**
+9.  **Total Monthly Marketing Budget:** $ allocated to ads/email/content.
+10. **New Customer Acquisition Ratio:** Percentage of total buyers that are new vs. returning.
+11. **Retention/Repeat Rate (%):** % of existing customers who buy again (inverse of churn).
+
+---
+
+### Section 2: Revenue Forecast (The "Sales" Tab)
+*Calculated automatically based on assumptions above.*
+
+| Row Label | Formula / Logic |
+| :--- | :--- |
+| **Total Visitors** | Sum of Paid + Organic Visitors |
+| **Orders Placed** | Total Visitors $\times$ Conversion Rate |
+| **Gross Revenue** | Orders Placed $\times$ Average Order Value (AOV) |
+| *Less: Returns* | Gross Revenue $\times$ Return Rate |
+| **Net Revenue** | Gross Revenue - Returns |
+
+---
+
+### Section 3: Cost of Goods Sold (COGS) & Gross Margin
+*Direct costs associated with fulfilling the orders.*
+
+| Row Label | Formula / Logic |
+| :--- | :--- |
+| **Cost of Inventory** | Orders Placed $\times$ Product Cost Per Unit |
+| **Shipping Expense** | Orders Placed $\times$ Shipping Cost Per Order |
+| **Payment Fees** | Gross Revenue $\times$ Payment Processing Fee |
+| **Total COGS** | Sum of Inventory + Shipping + Fees |
+| **Gross Margin ($)** | Net Revenue - Total COGS |
+| **Gross Margin (%)** | Gross Margin ($) / Net Revenue |
+
+---
+
+### Section 4: Customer Acquisition & Retention (The "CAC/Churn" Logic)
+*This is where CAC and Churn are calculated. In e-commerce, churn is often defined as the loss of customers over time.*
+
+| Row Label | Formula / Logic |
+| :--- | :--- |
+| **Marketing Spend** | Sum of Ad spend + Influencers + Agency Fees |
+| **New Customers Acquired** | Marketing Spend / **(CAC Calculation)** *(See below)* OR Derived from "Conversion Rate $\times$ Visitors" $\times$ "New % Ratio". |
+| **Blended CAC** | Total Marketing Spend / New Customers Acquired |
+| **Returning Customers** | Previous Month's Customer Base $\times$ Retention/Repeat Rate |
+| **Total Active Customers** | (Previous Month Active) - (Churned) + (New Acquired) |
+| **Monthly Churn Rate** | Customers Lost from Active Pool / Total Starting Customers |
+
+*Note: Ensure your "New vs. Returning" logic creates a loop where Month 2's returning customers come from Month 1's new customers.*
+
+---
+
+### Section 5: Operating Expenses (OPEX)
+*Fixed costs required to run the business, independent of sales volume.*
+
+| Row Label | Notes |
+| :--- | :--- |
+| **Salaries & Benefits** | Founders, team members. |
+| **Software/Subscriptions** | Shopify, email tool, analytics, CRM. |
+| **Inventory Purchase (Cash)** | *Note: Cash outflow for buying stock often differs from COGS on P&L due to lead times.* |
+| **Office/Overhead** | Rent, utilities, legal/accounting fees. |
+| **Total OPEX** | Sum of all fixed costs. |
+
+---
+
+### Section 6: Profit & Cash Flow (The "Output" Tab)
+
+| Row Label | Formula / Logic |
+| :--- | :--- |
+| **Gross Profit** | Net Revenue - Total COGS |
+| **EBITDA** | Gross Profit - Total OPEX - Marketing Spend |
+| **Net Income** | EBITDA - Taxes/Interest (usually 0 for early stage) |
+| **Cash Inflow** | Net Revenue + Capital Raised |
+| **Cash Outflow** | COGS Payment Timing + Inventory Purchase + Salaries + Rent + Ads |
+| **Monthly Burn** | Cash Outflow - Cash Inflow (Negative is cash burn) |
+| **Runway (Months)** | Current Cash Balance / Monthly Burn |
+
+---
+
+### Key Ratios Dashboard (Visual Summary)
+*Create a static box on the dashboard to track health against these KPIs:*
+
+1.  **LTV:CAC Ratio:** Calculate Lifetime Value of a customer over 12 months vs. their CAC. (Target: > 3:1).
+2.  **Break-even Point:** Month in which Net Income becomes positive.
+3.  **Gross Margin %:** Target typically 50-70% for e-commerce.
+4.  **Payback Period:** How many months it takes to earn back the CAC from that customer's gross profit.
+
+### Critical Implementation Tips
+
+1.  **Seasonality:** E-commerce is highly seasonal (e.g., Q4 holiday spike). In your "Visitors" and "AOV" assumptions, ensure Months 11-12 reflect higher volume/prices than January.
+2.  **Inventory Lag:** If you hold inventory in a warehouse, the cash leaves *before* the COGS hits the P&L. Ensure your Cash Flow model reflects the cash tied up in stock (Section 5, Inventory Purchase).
+3.  **Churn Nuance:** Unlike SaaS, e-commerce churn isn't always automatic cancellation. Use **"Repeat Purchase Rate"** as a better proxy for retention. If 10% of customers buy once and never again, that is your churn.
+4.  **Simplicity Rule:** Do not try to track every single SKU cost separately in Month 1. Aggregate all products into an "Average Product Cost" until you have data on specific margins per item.

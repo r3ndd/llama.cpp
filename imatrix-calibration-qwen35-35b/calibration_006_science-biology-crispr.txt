@@ -1,0 +1,7 @@
+CRISPR-Cas9 functions as a precision molecular tool, often described as "genetic scissors." It uses a guide RNA molecule to locate and bind to a specific DNA sequence, recruiting the Cas9 enzyme to cut both strands of the DNA. Once the break is made, the cell's natural repair mechanisms can either disable the gene (by introducing small mutations) or insert a new genetic sequence to correct a defect.
+
+**Therapeutic Use:**
+CRISPR has been approved for treating **Sickle Cell Disease**. In this therapy, a patient's blood-forming stem cells are edited outside the body to reactivate the production of fetal hemoglobin, which compensates for the defective adult hemoglobin, before being returned to the patient.
+
+**Ethical Concern:**
+A primary ethical issue is **germline editing**, which involves modifying sperm, eggs, or embryos so that changes become heritable and pass to future generations. Critics argue this raises concerns about informed consent (since descendants cannot agree) and could lead to eugenics or "designer babies," where genes are edited for enhancement rather than disease prevention.

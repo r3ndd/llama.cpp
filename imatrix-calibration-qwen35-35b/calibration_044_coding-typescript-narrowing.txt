@@ -1,0 +1,76 @@
+Here's a complete TypeScript example demonstrating how to define a discriminated union for payment methods and ensure exhaustive handling in control flow statements with compile-time type safety.
+
+### 1. Define the Discriminated Union
+
+```typescript
+type PaymentMethod = 
+  | { type: 'credit_card'; last4: string; expiry: string }
+  | { type: 'debit_card'; last4: string; expiry: string }
+  | { type: 'bank_transfer'; accountNumber: string; routingNumber: string }
+  | { type: 'crypto'; currency: string; walletAddress: string }
+  | { type: 'cash'; amount: number };
+```
+
+Each variant includes a unique `type` field (the discriminant), enabling TypeScript to narrow the type in control flow.
+
+### 2. Process Payment with Exhaustive `switch`
+
+```typescript
+function processPayment(payment: PaymentMethod): string {
+  switch (payment.type) {
+    case 'credit_card':
+      return `Processing credit card ending in ${payment.last4}`;
+    case 'debit_card':
+      return `Processing debit card ending in ${payment.last4}`;
+    case 'bank_transfer':
+      return `Initiating bank transfer to account ${payment.accountNumber}`;
+    case 'crypto':
+      return `Processing ${payment.currency} payment to ${payment.walletAddress}`;
+    case 'cash':
+      return `Handling cash payment of $${payment.amount}`;
+    default:
+      // This should never be reached due to exhaustive checking
+      const _never: never = payment;
+      return _never;
+  }
+}
+```
+
+### 3. Optional: Helper Function to Enforce Exhaustiveness
+
+To catch missing cases at compile time, you can create a helper that ensures all union members are handled:
+
+```typescript
+function assertExhaustive(value: never): never {
+  throw new Error(`Unhandled case: ${value}`);
+}
+
+// Usage:
+function processPaymentSafe(payment: PaymentMethod): string {
+  switch (payment.type) {
+    case 'credit_card':
+      return `Processing credit card ending in ${payment.last4}`;
+    case 'debit_card':
+      return `Processing debit card ending in ${payment.last4}`;
+    case 'bank_transfer':
+      return `Initiating bank transfer to account ${payment.accountNumber}`;
+    case 'crypto':
+      return `Processing ${payment.currency} payment to ${payment.walletAddress}`;
+    case 'cash':
+      return `Handling cash payment of $${payment.amount}`;
+    default:
+      return assertExhaustive(payment);
+  }
+}
+```
+
+If a new variant is added to `PaymentMethod` later, TypeScript will raise an error unless the `default` is updated or the missing case is handled explicitly.
+
+### 4. Benefits of This Approach
+
+- **Type Safety:** Ensures all payment types are explicitly handled.
+- **Compile-Time Checks:** Prevents runtime errors due to unhandled cases.
+- **Maintainability:** Adding new payment types requires updating all switch expressions.
+- **Extensibility:** Easily extendable with more payment types or additional metadata.
+
+This pattern is a best practice in TypeScript for modeling domain-specific data and ensuring robust, exhaustive control flow handling.

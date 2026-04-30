@@ -1,0 +1,197 @@
+Cursor-based pagination is a robust and scalable strategy for paginating large datasets in GraphQL APIs. It avoids issues like duplicate or missing items that can arise with offset-based pagination. Below is a complete design guide for implementing cursor-based pagination in GraphQL, including schema design, resolver logic, and strategies to ensure consistency and correctness.
+
+---
+
+## 1. Cursor-Based Pagination Schema
+
+### GraphQL Schema
+
+```graphql
+type Query {
+  users(
+    first: Int!
+    after: String
+  ): UserConnection!
+}
+
+type UserConnection {
+  edges: [UserEdge!]!
+  pageInfo: PageInfo!
+}
+
+type UserEdge {
+  node: User!
+  cursor: String!
+}
+
+type PageInfo {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
+}
+
+type User {
+  id: ID!
+  name: String!
+  email: String!
+  createdAt: DateTime!
+}
+```
+
+### Input Types (Optional for Flexibility)
+
+```graphql
+input UserConnectionInput {
+  first: Int!
+  after: String
+  orderBy: UserOrderInput
+}
+
+input UserOrderInput {
+  field: UserOrderField!
+  direction: OrderDirection!
+}
+
+enum UserOrderField {
+  CREATED_AT
+  NAME
+}
+
+enum OrderDirection {
+  ASC
+  DESC
+}
+```
+
+---
+
+## 2. Resolver Implementation (Node.js Example)
+
+```javascript
+async function usersResolver(_, { first, after }, context) {
+  const limit = Math.min(first, 100);
+  const offset = after ? decodeCursor(after) : 0;
+
+  const [users, total] = await context.db.user.findMany({
+    skip: offset,
+    take: limit,
+    orderBy: { createdAt: 'desc' },
+  });
+
+  const edges = users.map(user => ({
+    cursor: encodeCursor(user.id),
+    node: user,
+  }));
+
+  const hasNextPage = offset + users.length < total;
+  const hasPreviousPage = offset > 0;
+
+  return {
+    edges,
+    pageInfo: {
+      hasNextPage,
+      hasPreviousPage,
+      startCursor: edges[0]?.cursor || null,
+      endCursor: edges[edges.length - 1]?.cursor || null,
+    },
+  };
+}
+```
+
+### Cursor Encoding/Decoding
+
+```javascript
+function encodeCursor(id) {
+  return Buffer.from(JSON.stringify({ id })).toString('base64');
+}
+
+function decodeCursor(cursor) {
+  return JSON.parse(Buffer.from(cursor, 'base64').toString());
+}
+```
+
+---
+
+## 3. Avoiding Duplicates and Missing Items
+
+### a. Use a Stable Sort Key
+
+Sort by a unique, immutable field (e.g., `id` or `createdAt`) to ensure consistent ordering across requests.
+
+```javascript
+orderBy: { createdAt: 'desc' }
+```
+
+### b. Handle Ties with Secondary Sort
+
+To prevent duplicates or gaps when multiple records share the same sort key:
+
+```javascript
+orderBy: { createdAt: 'desc', id: 'asc' }
+```
+
+### c. Use Cursor-Based Filtering, Not Offset
+
+Instead of `skip/limit`, use cursor-based filtering:
+
+```javascript
+const nextCursor = decodeCursor(after);
+const users = await db.user.findMany({
+  where: {
+    id: { lt: nextCursor.id }, // for descending order
+  },
+  orderBy: { createdAt: 'desc', id: 'asc' },
+  take: limit,
+});
+```
+
+### d. Avoid Race Conditions
+
+Use transactions when modifying data between paginated requests:
+
+```javascript
+await db.$transaction(async (tx) => {
+  // Read and write operations
+});
+```
+
+---
+
+## 4. Edge Cases and Best Practices
+
+- **Invalid Cursor**: Validate and return an error if the cursor is malformed.
+- **Empty Results**: Handle cases where no more items exist; `hasNextPage` should be `false`.
+- **Cursor Expiration**: If using time-based cursors, include timestamps and validate expiration.
+- **Performance**: Ensure indexes exist on sort fields (e.g., `createdAt`, `id`) for fast filtering.
+- **Security**: Sanitize inputs and enforce rate limits to prevent abuse.
+- **Testing**:
+
+```javascript
+describe('Cursor Pagination', () => {
+  it('should return consistent results across requests', async () => {
+    const cursor1 = await fetchPage(10);
+    const cursor2 = await fetchPage(10, cursor1.endCursor);
+    expect(cursor2.edges.length).toBeLessThanOrEqual(10);
+    expect(new Set(cursor2.edges.map(e => e.node.id)).size).toBe(cursor2.edges.length);
+  });
+});
+```
+
+---
+
+## 5. Summary of Best Practices
+
+| Concern              | Solution                                                  |
+|----------------------|-----------------------------------------------------------|
+| Sorting Stability    | Use unique, immutable fields (`createdAt`, `id`)          |
+| Duplicate Prevention | Secondary sort key (e.g., `id`) to break ties             |
+| Missing Items        | Use cursor-based filtering instead of `skip`              |
+| Concurrency Safety   | Use transactions or optimistic locking                    |
+| Indexing             | Index sort fields (`createdAt`, `id`) for performance     |
+| Validation           | Check cursor format and validity on every request         |
+| Performance Limits   | Enforce max page size (e.g., 100 items)                   |
+
+---
+
+Cursor-based pagination ensures a consistent, efficient, and scalable way to paginate large datasets in GraphQL. By using stable sort keys, secondary tiebreakers, and cursor-based filtering, you can eliminate duplicates and missing items while maintaining strong performance and reliability.

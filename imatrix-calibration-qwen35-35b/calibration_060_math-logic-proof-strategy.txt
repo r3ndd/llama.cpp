@@ -1,0 +1,127 @@
+Here is a beginner-friendly guide to the three most common proof techniques. Think of a proof not as magic, but as a story where every sentence logically follows from the one before it until you reach your final conclusion.
+
+---
+
+## 1. Direct Proof
+**"The Straight Line"**
+
+### When to use it:
+Use this when the statement is in the form **"If $P$, then $Q$"**. You start with what is true ($P$), use logical steps, and arrive at the result ($Q$) naturally.
+
+### The Strategy:
+1.  **Assume** the premise ($P$) is true.
+2.  **Show** how your assumptions connect to known facts or definitions.
+3.  **Algebraic Manipulation:** Rewrite expressions until you reach the conclusion ($Q$).
+4.  **Conclude:** "Since $Q$ followed from $P$, the statement is true."
+
+### The Analogy:
+It’s like building a bridge. You stand on the left bank (Assumption) and lay planks step-by-step until you touch the right bank (Conclusion). No teleporting or detours allowed.
+
+### Example: **The sum of two even numbers is even.**
+
+**Goal:** Prove that if $a$ and $b$ are even, then $a + b$ is even.
+
+1.  **Assumption:** Let $a$ be an even number and let $b$ be an even number.
+2.  **Definition:** By definition, any even number can be written as "2 times some integer." So:
+    *   $a = 2k$ (where $k$ is an integer)
+    *   $b = 2m$ (where $m$ is an integer)
+3.  **Addition:** Let's add them together:
+    *   $a + b = 2k + 2m$
+4.  **Factoring:** Pull out the common factor of 2:
+    *   $a + b = 2(k + m)$
+5.  **Conclusion:** Since $k$ and $m$ are integers, their sum $(k+m)$ is also an integer (let's call it $N$).
+    *   Therefore, $a + b = 2N$.
+    *   Because the sum looks like "2 times an integer," by definition, **the sum is even.**
+
+---
+
+## 2. Proof by Contradiction
+**"The Reductio ad Absurdum"**
+
+### When to use it:
+Use this when a direct path seems impossible or hard to find. It works well for statements that say "X is impossible" or "X does not exist."
+
+### The Strategy:
+1.  **Assume the Opposite:** Pretend the thing you are trying to prove is **FALSE**.
+2.  **Reasoning:** Proceed with logical steps as if this opposite assumption is true.
+3.  **Find a Contradiction:** Eventually, you will hit a wall where something impossible happens (e.g., a number is both even and odd, or $1 = 0$).
+4.  **Conclude:** Since the assumption led to nonsense, the assumption must be false. Therefore, your original statement must be true.
+
+### The Analogy:
+Imagine you are sure your friend isn't in the house. To prove it, you assume they *are* inside. You check every room, but the doors were locked from the outside, and no windows were opened. Finding that contradiction proves they aren't in the house.
+
+### Example: **The square root of 2 ($\sqrt{2}$) is irrational.**
+*(Note: An irrational number cannot be written as a fraction $a/b$).*
+
+1.  **Assumption (The Opposite):** Assume $\sqrt{2}$ is **rational**. This means we can write it as a fraction $\frac{a}{b}$, where $a$ and $b$ are whole numbers with no common factors (it's in "lowest terms").
+    *   So, $\sqrt{2} = \frac{a}{b}$.
+2.  **Algebra:** Square both sides:
+    *   $2 = \frac{a^2}{b^2}$
+    *   Multiply by $b^2$: $2b^2 = a^2$
+3.  **Logic Step 1 (Evenness):** Look at $a^2$. Since it equals $2 \times b^2$, $a^2$ is clearly **even** (because it has a factor of 2).
+4.  **Logic Step 2:** If the square of a number ($a^2$) is even, then the number itself ($a$) must be even. So, we can write $a = 2k$.
+5.  **Substitute:** Plug $2k$ back into our equation $2b^2 = a^2$:
+    *   $2b^2 = (2k)^2$
+    *   $2b^2 = 4k^2$
+    *   Divide by 2: $b^2 = 2k^2$
+6.  **Logic Step 3:** Look at $b^2$. It equals $2 \times k^2$, so $b^2$ is also **even**. This implies $b$ must be even.
+7.  **The Contradiction:**
+    *   In Step 1, we assumed $\frac{a}{b}$ had no common factors (lowest terms).
+    *   But now we proved both $a$ and $b$ are even (meaning they share a factor of 2).
+    *   This is a **contradiction**.
+8.  **Conclusion:** Our assumption that $\sqrt{2}$ is rational must be false. Therefore, **$\sqrt{2}$ is irrational.**
+
+---
+
+## 3. Proof by Mathematical Induction
+**"The Domino Effect"**
+
+### When to use it:
+Use this when you need to prove a statement is true for **all whole numbers** ($1, 2, 3, \dots$). You usually see "Prove that for all $n \geq 1$..."
+
+### The Strategy:
+You don't check every number (there are infinite!). Instead, you rely on two steps:
+1.  **Base Case:** Prove it is true for the first number ($n = 1$).
+2.  **Inductive Step:** Prove that *if* it works for an arbitrary number $k$, it *must* work for the next number $(k+1)$.
+3.  **Conclusion:** If the first domino falls, and every domino knocks over the next one, they all fall.
+
+### The Analogy:
+Imagine a long line of dominoes falling. You don't need to push every single one. You just need to ensure:
+1.  The first one falls.
+2.  Whenever one falls, it is guaranteed to knock over its neighbor.
+
+### Example: **The sum of the first $n$ integers.**
+**Goal:** Prove that $1 + 2 + 3 + \dots + n = \frac{n(n+1)}{2}$.
+
+**Step 1: Base Case ($n=1$)**
+*   LHS (Left Hand Side): The sum is just **1**.
+*   RHS (Right Hand Side): Plug $n=1$ into the formula $\frac{1(1+1)}{2} = \frac{2}{2} = 1$.
+*   Since LHS = RHS, the statement is true for $n=1$.
+
+**Step 2: Inductive Step**
+*   **Inductive Hypothesis:** Assume the formula is true for some number $k$. (We don't know if $k$ is 5 or 100 yet, just assume it works).
+    *   Assumption: $1 + 2 + \dots + k = \frac{k(k+1)}{2}$
+*   **Goal:** We must show the formula holds for the *next* number, $(k+1)$.
+    *   Target to prove: $1 + 2 + \dots + k + (k+1) = \frac{(k+1)(k+2)}{2}$
+*   **Proof:**
+    *   Start with the sum up to $k+1$: $(1 + 2 + \dots + k) + (k+1)$
+    *   Substitute our Assumption for the part in brackets: $\left[ \frac{k(k+1)}{2} \right] + (k+1)$
+    *   Factor out $(k+1)$ from both terms: $(k+1) \left[ \frac{k}{2} + 1 \right]$
+    *   Find a common denominator inside the bracket: $(k+1) \left[ \frac{k + 2}{2} \right]$
+    *   Rearrange: $\frac{(k+1)(k+2)}{2}$
+*   **Result:** This matches our Target exactly.
+
+**Step 3: Conclusion**
+Since it works for the start ($n=1$) and working for $k$ guarantees working for $k+1$, the formula is true for **all integers $n \geq 1$**.
+
+---
+
+### Summary Cheat Sheet
+
+| Method | Think of it as... | Key Question to Ask Yourself |
+| :--- | :--- | :--- |
+| **Direct** | Building a bridge. | "If I start here, can I logically arrive there?" |
+| **Contradiction** | Catching a liar. | "What if this were *false*? Would that break reality?" |
+| **Induction** | Dominoes falling. | "Does the first one fall, and does one knock over the next?" |
+
+**Tip:** If you get stuck in an Induction proof, look at your Algebra. Often, you have to use "tricks" like factoring or finding common denominators to make the $(k+1)$ side match the formula. That is normal!

@@ -1,0 +1,38 @@
+Clinical trials are research studies performed on people that evaluate the safety and effectiveness of new medical interventions, such as drugs, devices, or therapies. These trials are divided into distinct phases to ensure patient safety and scientific rigor before a treatment reaches the general public.
+
+Here is a description of Phases I through IV, along with the primary goal for each.
+
+### Phase I
+**Focus:** Safety and Dosage
+*   **Description:** This is the first time a new experimental drug or treatment is tested in humans. The group is very small, typically ranging from **20 to 100 people**. In most cases, these volunteers are healthy individuals who do not have the disease being targeted (though for cancer treatments, Phase I often involves patients with the disease).
+*   **Primary Goal:** To determine if the treatment is **safe** for human use. Researchers also look at how the drug is processed by the body (pharmacokinetics) to find the safe dosage range and identify immediate side effects.
+*   **Duration:** Usually 1 year or less.
+
+### Phase II
+**Focus:** Preliminary Efficacy and Side Effects
+*   **Description:** If Phase I is successful, the trial moves to this phase. The study includes a larger group of **100 to 300 participants** who actually have the disease or condition being treated (rather than healthy volunteers).
+*   **Primary Goal:** To assess whether the treatment has an **anticancer effect or therapeutic benefit (efficacy)** and to continue monitoring safety. Researchers try to determine if the drug works against the disease at the specific dosages identified in Phase I. This phase also aims to refine the optimal dose for larger studies.
+*   **Duration:** Typically 2 years or less.
+
+### Phase III
+**Focus:** Confirmation of Efficacy and Risk/Benefit Ratio
+*   **Description:** These are large-scale, randomized, and often multi-center trials involving **1,000 to 3,000+ patients**. Participants are usually randomly assigned to either receive the new treatment or a standard existing treatment (or a placebo). This allows researchers to compare the new intervention directly against current standards of care.
+*   **Primary Goal:** To **confirm efficacy** and monitor adverse reactions in a diverse population. The data collected here is crucial for regulatory bodies (like the FDA or EMA) to decide whether to approve the drug for public use. It answers the question: "Is this treatment better or safer than what we already have?"
+*   **Duration:** Typically 3 to 4 years.
+
+### Phase IV
+**Focus:** Post-Marketing Surveillance
+*   **Description:** These studies occur **after** the drug has been approved and released to the general public. Because clinical trials are limited in size and duration, a post-approval phase allows researchers to study the drug's performance in real-world settings involving hundreds of thousands or millions of patients over several years.
+*   **Primary Goal:** To detect **rare or long-term side effects** that may not have been visible in smaller, shorter trials. It also investigates whether the drug can be used for other conditions (new indications) or if it remains cost-effective compared to other treatments.
+*   **Duration:** Can last for many years or indefinitely.
+
+### Summary Table
+
+| Phase | Participants | Primary Goal |
+| :--- | :--- | :--- |
+| **I** | 20–100 (mostly healthy) | **Safety:** Is it safe? What is the right dose? |
+| **II** | 100–300 (patients) | **Preliminary Efficacy:** Does it work? More safety data. |
+| **III** | 1,000–3,000+ (patients) | **Confirmation:** Is it better than standard treatment? (Approval phase) |
+| **IV** | General Public | **Surveillance:** Long-term safety and rare side effects. |
+
+*Note: Not all drugs successfully complete all phases; many fail during Phase I or II due to unexpected toxicity or lack of efficacy.*

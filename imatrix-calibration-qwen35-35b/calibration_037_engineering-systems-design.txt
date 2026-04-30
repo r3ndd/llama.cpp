@@ -1,0 +1,147 @@
+Here is a comprehensive design for a fault-tolerant, real-time telemetry pipeline. This architecture prioritizes data durability, decoupling of components, and resilience against partial system failures.
+
+### High-Level Architecture Diagram
+
+```mermaid
+flowchart TD
+    subgraph "Producers"
+        A[Application Logs] -->|TCP/HTTP| C
+        B[IoT Sensors] -->|MQTT| C
+    end
+
+    subgraph "Ingestion Layer (High Availability)"
+        direction TB
+        C((Load Balancer)) --> D{API Gateway / K8s Ingress}
+        D --> E[Traffic Shaper & Auth]
+        E --> F[(Kafka Cluster)]
+        
+        subgraph "Kafka Configuration"
+            F1[Broker 1 - AZ-1]
+            F2[Broker 2 - AZ-2]
+            F3[Broker 3 - AZ-3]
+        end
+        
+        F --- F1
+        F --- F2
+        F --- F3
+    end
+
+    subgraph "Processing Layer (Stateful Stream)"
+        G[Kubernetes Cluster]
+        
+        H[Flink/Spark Operator] --> I[Pod Group]
+        I --> J[Aggregation & Filter Logic]
+        
+        K[(Kafka Schema Registry)] -.->|Validates| J
+        
+        L[Error Sink] -.->|Poison Messages| M[(DLQ Topic)]
+        J -- Exception | Error > 5% --> Z[Circuit Breaker]
+        Z -- Block --> J
+    end
+
+    subgraph "Storage Layer (Durability & Query)"
+        N[(Hot Store)]:::hot
+        O[(Cold Storage)]:::cold
+        P[Metrics DB]:::hot
+        
+        J -->|Raw Telemetry| N
+        J -->|Aggregated Stats| P
+        N -.->|Snapshot/Archives| O
+        
+        subgraph "Storage Config"
+            N1[NSS (e.g., ClickHouse/Timescale)]
+            O1[Data Lake S3/Iceberg]
+        end
+        
+        N --- N1
+        N1 ---> O1
+    end
+
+    subgraph "Observability & Control Plane"
+        Q[Prometheus/Grafana]
+        R[Alert Manager]
+        S[Audit Log]
+        
+        F <--> Q
+        J <--> Q
+        N <--> Q
+        R -->|Ops Notification| T[PagerDuty/Slack]
+    end
+
+    style C fill:#f9f,stroke:#333,stroke-width:2px
+    style F fill:#ff9,stroke:#333,stroke-width:2px
+    style J fill:#bbf,stroke:#333,stroke-width:2px
+    style N fill:#bfb,stroke:#333,stroke-width:2px
+    style M fill:#ddd,stroke:#333,stroke-dasharray: 5 5
+
+    classDef hot stroke:#f00,stroke-width:2px,color:black
+    classDef cold stroke:#00f,stroke-width:2px,color:white
+```
+
+---
+
+### Layer-by-Layer Breakdown & Fault Tolerance Strategies
+
+#### 1. Ingestion Layer (The Buffer)
+*   **Components:** Load Balancer, API Gateway, Apache Kafka Cluster.
+*   **Purpose:** Decouple producers from consumers and absorb traffic spikes.
+*   **Fault Tolerance Features:**
+    *   **Topic Replication:** Configure `replication.factor > 1` (ideally across Availability Zones). If one broker dies, leadership transfers to a replica without data loss.
+    *   **Min ISR (`min.insync.replicas`):** Set this >= 2. Ensures writes only succeed if acknowledged by multiple brokers before being committed. Prevents data loss during network partitions.
+    *   **Producer Idempotence:** Enable `enable.idempotence=true` on producers to handle duplicate network retries gracefully.
+    *   **Circuit Breakers:** The API Gateway drops connections or returns 503/429 if the backend is overwhelmed (Backpressure).
+
+#### 2. Processing Layer (The Brain)
+*   **Components:** Kubernetes Cluster running Stream Processors (Apache Flink / Spark Structured Streaming).
+*   **Purpose:** Real-time filtering, enrichment, aggregation, and alerting logic.
+*   **Fault Tolerance Features:**
+    *   **Checkpointing:** The processor takes distributed snapshots of state (e.g., 5-second intervals) to S3/HDFS. If a pod dies, it recovers from the last checkpoint and resumes processing.
+    *   **State Backend Storage:** Local disk is ephemeral; Flink State must be backended by durable storage (e.g., RocksDB on remote filesystem or embedded state store) so recovery is instant.
+    *   **Dead Letter Queue (DLQ):** Invalid or unparseable messages are routed to a separate topic rather than crashing the stream processor. A separate consumer process can retry DLQ messages later.
+    *   **K8s Health Checks:** Liveness probes detect hung processes; Readiness probes prevent traffic routing during startup. K8s automatically reschedules dead pods to healthy nodes.
+    *   **Schema Registry:** Enforces data contracts (Avro/Protobuf). Prevents schema drift from breaking the processing logic without manual code deployment.
+
+#### 3. Storage Layer (The Memory)
+*   **Components:** Hot Store (OLAP TSDB), Cold Store (Data Lake).
+*   **Purpose:** Fast querying for dashboards/alerts and long-term retention for compliance.
+*   **Fault Tolerance Features:**
+    *   **Elastic Scaling (Hot):** If query latency spikes, scale the TSDB horizontally. Use read-replicas to distribute load.
+    *   **Write-Ahead Logs (WAL):** The database writes to a WAL before acknowledging. Ensures persistence if power fails at the storage node level.
+    *   **Immutability (Cold):** Write-once, Read-many (WORM) object storage (e.g., AWS S3 with Object Lock or Glacier). Prevents accidental deletion/corruption of historical data.
+
+#### 4. Control Plane & Observability
+*   **Components:** Metrics Collector, Alerting System, Audit Logs.
+*   **Purpose:** Detecting faults before they cause outages.
+*   **Fault Tolerance Features:**
+    *   **Decoupled Metrics:** Do not use the telemetry pipeline itself to send health metrics about the telemetry pipeline (prevents "logging loop"). Use sidecar containers with Prometheus.
+    *   **Multi-Region Fallback:** Critical alerting data should be mirrored to a secondary region via replication tools (e.g., Cross-region Kafka Mirror Maker).
+
+---
+
+### Critical Anti-Patterns to Avoid
+
+1.  **Synchronous Processing:** Do not block the ingestion API while waiting for storage or processing completion. Always use async patterns (Fire-and-Forgo + DLQ).
+2.  **Single Points of Failure (SPOF):** Never run the Kafka Cluster, Database, or Load Balancer in a single Availability Zone.
+3.  **In-Process State:** Never store critical state (like offsets or counters) inside the processor's RAM. If the pod restarts, data is lost.
+4.  **Silent Failures:** Ensure all processing errors are logged to the DLQ and reported to the monitoring system. Do not allow "swallowing exceptions" in production code.
+
+### Data Flow Summary (Normal vs. Fault Scenario)
+
+*   **Normal Flow:** Device $\rightarrow$ LB $\rightarrow$ Kafka $\rightarrow$ Processor (State Checkpointed) $\rightarrow$ Hot DB $\rightarrow$ Dashboard.
+*   **Node Failure:**
+    1.  Processor Pod crashes.
+    2.  Kubernetes kills the container and restarts it on a healthy Node.
+    3.  Flink recovers from last S3 checkpoint; state is rehydrated.
+    4.  Processing resumes exactly where it stopped. Latency spike occurs briefly, then normalizes.
+*   **Data Loss Prevention:**
+    *   If Kafka Broker fails while writing: Replicas in other AZs take over.
+    *   If Processor crashes mid-batch: Transactions roll back until next checkpoint commit (Exactly-Once Semantics).
+    *   If Storage Write fails: Message retries up to N attempts; eventually lands in DLQ for manual inspection.
+
+### Recommended Tech Stack Example
+*   **Message Queue:** Confluent Cloud or Amazon MSK (Managed Kafka)
+*   **Compute:** Apache Flink on Kubernetes (EKS/GKE/AKS)
+*   **Hot Storage:** TimescaleDB or ClickHouse
+*   **Cold Storage:** AWS S3 with Delta Lake/Iceberg tables
+*   **Schema Registry:** Confluent Schema Registry
+*   **Monitoring:** Prometheus + Grafana + Jaeger

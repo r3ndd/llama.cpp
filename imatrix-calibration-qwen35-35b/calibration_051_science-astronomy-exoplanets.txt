@@ -1,0 +1,53 @@
+Here is an explanation of how the Transit and Radial-Velocity methods work to detect exoplanets, along with their respective limitations.
+
+---
+
+### 1. The Transit Method
+
+**How it works:**
+The transit method relies on photometry—measuring the brightness of a star. It detects planets based on the geometry of orbit.
+
+*   **The Dip in Brightness:** As an exoplanet orbits its star, there is a specific moment where the planet passes directly between its star and the observer (Earth or a space telescope). During this brief window, the planet blocks a tiny fraction of the star's light.
+*   **The Light Curve:** Instruments measure the star’s brightness over time. If the light drops slightly in a repetitive, periodic pattern, it suggests an object is orbiting the star and passing in front of it.
+
+**What we learn from this method:**
+*   **Planet Size (Radius):** The amount of light blocked corresponds directly to the size of the planet relative to the star.
+*   **Orbital Period:** The time interval between transits tells us how long a year is on that planet.
+*   **Atmosphere:** When the planet is at the edge of the star, some starlight passes through its atmosphere. By analyzing the spectrum of this light, scientists can identify the chemical makeup of the exoplanet's atmosphere.
+
+**Main Limitations:**
+1.  **Geometry Constraints (Low Probability):** The orbit must be perfectly aligned with our line of sight (edge-on) for a transit to occur. Because most planetary orbits are not perfectly flat relative to us, we miss the vast majority of planets unless they happen to transit by chance (roughly 0.5% to 1% alignment probability).
+2.  **False Positives:** Other celestial events can mimic a transit, such as two stars orbiting each other (eclipsing binaries) or background stars that are eclipsing one another in the same line of sight. Distinguishing these from planets requires follow-up observations.
+3.  **Time Consumption:** To confirm a planet is truly an orbiting body and not a glitch, astronomers usually need to observe at least three transits. For a planet with a long orbital period (like Earth), this confirmation process could take many years.
+
+---
+
+### 2. The Radial-Velocity (RV) Method
+
+**How it works:**
+The radial-velocity method (also called Doppler spectroscopy or the wobble method) relies on gravity. It detects planets based on the pull they exert on their host star.
+
+*   **The Wobble:** While we often imagine planets orbiting a static star, in reality, both objects orbit a common center of mass (barycenter). Even though the star is much larger, it still moves slightly in a small circle or ellipse due to the planet's gravity.
+*   **The Doppler Effect:** As the star wobbles:
+    *   When it moves **toward** Earth, its light waves are compressed, shifting toward the blue end of the spectrum (Blueshift).
+    *   When it moves **away** from Earth, its light waves are stretched, shifting toward the red end of the spectrum (Redshift).
+*   **Detection:** Highly sensitive spectrographs measure these tiny shifts in the star’s spectral lines. If these shifts occur periodically, it indicates a planet is tugging on the star.
+
+**What we learn from this method:**
+*   **Planet Mass (Minimum Mass):** The speed and strength of the wobble tell us the mass of the planet pulling on the star.
+*   **Orbital Period:** Similar to the transit method, the time it takes for the star to complete its "wobble" cycle reveals the orbital period.
+
+**Main Limitations:**
+1.  **Stellar Noise (Jitter):** Stars are not perfectly calm; they have surface activity like starspots and flares. These features can create Doppler shifts that look exactly like the signal of a planet, making it difficult to distinguish true signals from stellar "noise."
+2.  **The "Minimum Mass" Problem:** This method measures velocity *along* our line of sight. We cannot see the "up-and-down" or sideways movement of the star. Consequently, we only calculate $M \sin(i)$ (mass times the sine of the inclination angle). If a planet's orbit is edge-on to us, we get the true mass; if it is face-on (like looking down at a table), we see no wobble at all.
+3.  **Difficulty Detecting Earth-sized Planets:** This method relies on measuring gravity. Massive planets (like Jupiter or "Hot Jupiters") create large, detectable wobbles quickly. Small, rocky planets (like Earth) exert a very weak gravitational pull, making them extremely difficult to detect around distant stars.
+
+---
+
+### Summary: Why Use Both?
+
+These methods are complementary. Because of their limitations, the most powerful approach is often to combine them:
+*   **Transit** gives you the planet's **size**.
+*   **Radial-Velocity** gives you the planet's **mass**.
+
+When combined, you can calculate the planet's **density**. A high density suggests a rocky planet (Earth-like), while low density suggests a gas giant. If neither method is used together, we are often left guessing whether a detected object is a small dense planet or a large puffy planet.

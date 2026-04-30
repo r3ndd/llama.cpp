@@ -1,0 +1,25 @@
+### Scientific Presentation Evaluation Rubric
+
+| **Criteria** | **4 (Exemplary)** | **3 (Proficient)** | **2 (Developing)** | **1 (Incomplete)** | **Score** |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Scientific Accuracy & Content** | Ideas are scientifically sound, complex concepts explained clearly. Hypothesis/Research question is precise. | Most content accurate. Concepts generally clear. Question stated but could be sharper. | Some factual errors. Explanation of core concepts is vague or unclear. Question missing. | Significant misconceptions. Content irrelevant to topic or incomplete. | ___ / 4 |
+| **Evidence & Data Analysis** | Claims supported by high-quality data (graphs/images). Analysis interprets results and acknowledges limitations. | Data supports claims. Basic analysis provided. Limitations mentioned briefly. | Data is present but poorly connected to claims. Minimal analysis provided. | No data used or data is irrelevant/unlabeled. | ___ / 4 |
+| **Communication & Visuals** | Slides are visually engaging (minimal text). Delivery is fluent, confident, and within time limits. | Slides are clear with appropriate visuals. Delivery is understandable and within time limits. | Slides cluttered or too text-heavy. Delivery is hesitant or significantly over/under time. | Disorganized slides/slides missing. Poor delivery (monotone, reading slides). | ___ / 4 |
+| **Q&A & Defense** | Answers questions with depth, demonstrates mastery of topic and cites sources appropriately. | Answer questions adequately. Shows general understanding of the work. | Struggles with questions; answers vague or relies on presenter to repeat the question. | Unable to answer basic questions regarding methodology or results. | ___ / 4 |
+
+**Total Score:** ____ / 16
+
+---
+### **Feedback & Comments:**
+
+**Strengths:**
+*   _________________________________________________________________
+
+**Areas for Improvement:**
+*   _________________________________________________________________
+
+**Grading Scale Reference:**
+*   **15-16:** Excellent (A)
+*   **13-14:** Good (B)
+*   **11-12:** Satisfactory (C)
+*   **0-10:** Needs Improvement (F/D)

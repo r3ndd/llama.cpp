@@ -1,0 +1,253 @@
+To prevent goroutine leaks during shutdown in a Go worker pool, use a clean cancellation pattern combining `context.Context`, buffered channels, and a wait group. This ensures all goroutines exit cleanly and resources are released properly.
+
+---
+
+## ✅ Clean Worker Pool Pattern with Context and Channels
+
+### 1. Worker Pool Implementation
+
+```go
+package workerpool
+
+import (
+	"context"
+	"sync"
+	"time"
+)
+
+type Job struct {
+	id     int
+	result chan interface{}
+}
+
+type WorkerPool struct {
+	numWorkers int
+	jobChan    chan Job
+	done       chan struct{}
+	wg         sync.WaitGroup
+}
+
+func NewWorkerPool(numWorkers int) *WorkerPool {
+	return &WorkerPool{
+		numWorkers: numWorkers,
+		jobChan:    make(chan Job, 100),
+		done:       make(chan struct{}),
+	}
+}
+
+func (wp *WorkerPool) Start(ctx context.Context) {
+	for i := 0; i < wp.numWorkers; i++ {
+		wp.wg.Add(1)
+		go wp.worker(ctx, i)
+	}
+}
+
+func (wp *WorkerPool) worker(ctx context.Context, id int) {
+	defer wp.wg.Done()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-wp.done:
+			return
+		case job, ok := <-wp.jobChan:
+			if !ok {
+				return
+			}
+			wp.processJob(job)
+		}
+	}
+}
+
+func (wp *WorkerPool) processJob(job Job) {
+	select {
+	case job.result <- "processed":
+		// Job handled
+	case <-time.After(5 * time.Second):
+		// Timeout handling
+	}
+}
+
+func (wp *WorkerPool) Submit(job Job) error {
+	select {
+	case wp.jobChan <- job:
+		return nil
+	default:
+		return fmt.Errorf("job channel full")
+	}
+}
+
+func (wp *WorkerPool) Shutdown(ctx context.Context) error {
+	close(wp.done)
+	select {
+	case <-time.After(10 * time.Second):
+		return fmt.Errorf("timeout waiting for workers to stop")
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	wp.wg.Wait()
+	return nil
+}
+```
+
+### 2. Usage Example
+
+```go
+func main() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	pool := NewWorkerPool(5)
+	pool.Start(ctx)
+
+	for i := 0; i < 100; i++ {
+		result := make(chan interface{}, 1)
+		job := Job{id: i, result: result}
+		pool.Submit(job)
+		<-result
+	}
+
+	if err := pool.Shutdown(ctx); err != nil {
+		log.Printf("shutdown error: %v", err)
+	}
+}
+```
+
+---
+
+## 🔒 Production-Ready Version with Metrics and Graceful Handling
+
+```go
+type WorkerPool struct {
+	numWorkers   int
+	jobChan      chan Job
+	resultChan   chan JobResult
+	shutdownCtx  context.Context
+	shutdown     context.CancelFunc
+	wg           sync.WaitGroup
+	mu           sync.RWMutex
+	running      bool
+	stats        *Stats
+}
+
+type Stats struct {
+	TotalJobs     int64
+	CompletedJobs int64
+	FailedJobs    int64
+	ActiveWorkers int
+}
+
+func NewWorkerPool(numWorkers int) *WorkerPool {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &WorkerPool{
+		numWorkers:  numWorkers,
+		jobChan:     make(chan Job, 100),
+		resultChan:  make(chan JobResult, 100),
+		shutdownCtx: ctx,
+		shutdown:    cancel,
+		stats:       &Stats{},
+	}
+}
+
+func (wp *WorkerPool) Start() {
+	wp.mu.Lock()
+	if wp.running {
+		wp.mu.Unlock()
+		return
+	}
+	wp.running = true
+	wp.mu.Unlock()
+
+	for i := 0; i < wp.numWorkers; i++ {
+		wp.wg.Add(1)
+		go wp.worker()
+	}
+}
+
+func (wp *WorkerPool) worker() {
+	defer wp.wg.Done()
+	for {
+		select {
+		case <-wp.shutdownCtx.Done():
+			return
+		case job, ok := <-wp.jobChan:
+			if !ok {
+				return
+			}
+			wp.processJob(job)
+		}
+	}
+}
+
+func (wp *WorkerPool) Submit(job Job) error {
+	wp.mu.RLock()
+	if !wp.running {
+		wp.mu.RUnlock()
+		return fmt.Errorf("pool not running")
+	}
+	wp.mu.RUnlock()
+
+	select {
+	case wp.jobChan <- job:
+		atomic.AddInt64(&wp.stats.TotalJobs, 1)
+		return nil
+	default:
+		return fmt.Errorf("job queue full")
+	}
+}
+
+func (wp *WorkerPool) processJob(job Job) {
+	select {
+	case result := <-job.result:
+		atomic.AddInt64(&wp.stats.CompletedJobs, 1)
+		wp.resultChan <- JobResult{JobID: job.id, Result: result}
+	case <-time.After(5 * time.Second):
+		atomic.AddInt64(&wp.stats.FailedJobs, 1)
+	}
+}
+
+func (wp *WorkerPool) Shutdown(ctx context.Context) error {
+	wp.mu.Lock()
+	if !wp.running {
+		wp.mu.Unlock()
+		return nil
+	}
+	wp.running = false
+	wp.mu.Unlock()
+
+	close(wp.jobChan)
+	wp.shutdown()
+
+	done := make(chan struct{})
+	go func() {
+		wp.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		close(wp.resultChan)
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (wp *WorkerPool) Stats() *Stats {
+	return wp.stats
+}
+```
+
+---
+
+## ✅ Best Practices Summary
+
+- Use `context.Context` for cancellation signaling.
+- Close channels explicitly to signal shutdown.
+- Use `sync.WaitGroup` to wait for worker termination.
+- Use `select` with `context.Done()` and channel reads to avoid blocking.
+- Support graceful shutdown with timeouts.
+- Track job stats for observability.
+- Ensure no goroutine is left untracked or waiting indefinitely.
+
+This pattern ensures your Go worker pool shuts down cleanly, avoids resource leaks, and is production-ready with metrics and error handling.

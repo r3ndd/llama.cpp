@@ -1,0 +1,84 @@
+Here is a comprehensive checklist for evaluating the credibility of online news sources and claims. This list is designed to help you move from passive consumption to active verification.
+
+### 🛑 Phase 1: The Pause (Pre-Engagement)
+*Before clicking "share" or scrolling deeper, pause.*
+
+- [ ] **Identify your emotional state:** Are you feeling angry, outraged, or terrified? High-arousal emotions are often triggers for misinformation. If yes, take a deep breath before evaluating.
+- [ ] **Check the headline vs. URL:** Does the website name match the content? (e.g., A site named "CNN Breaking News" might not actually be CNN).
+- [ ] **Ask the "So What?" test:** If this story were true, does it fundamentally change what we know about the world? Extraordinary claims usually require extraordinary evidence.
+
+---
+
+### 🏢 Phase 2: The Source (Who is behind it?)
+*Investigate the organization publishing the content.*
+
+- [ ] **Check the "About Us" page:** Do they clearly state their mission, leadership, and funding? Vague or missing info is a red flag.
+- [ ] **Look for contact information:** Is there a verifiable physical address and phone number?
+- [ ] **Determine ownership:** Who owns the parent company? (e.g., Is it a major corporation, a non-profit think tank, or a private individual?) Check via tools like *Whois*.
+- [ ] **Review their bias rating:** Use a media bias chart (e.g., Media Bias/Fact Check) to see where they sit on the political spectrum.
+- [ ] **Identify the genre:** Is this labeled as "News," "Opinion," "Satire," or "Sponsored Content"? Never treat opinion pieces as hard facts.
+
+---
+
+### 👤 Phase 3: The Author (Who wrote it?)
+*Verify the journalist or contributor.*
+
+- [ ] **Is the byline present?** Anonymous articles are inherently less credible than signed ones.
+- [ ] **Check the author's background:** Do they have experience in this specific field? Are they a general staff writer or a subject matter expert?
+- [ ] **Search the author:** Is the name familiar in the journalism world? Are they writing for other reputable outlets?
+- [ ] **Watch out for fake personas:** Check if the profile picture is stolen (use reverse image search) and if their Twitter/LinkedIn history makes sense.
+
+---
+
+### 📝 Phase 4: The Content (What does it say?)
+*Analyze the quality of the writing itself.*
+
+- [ ] **Check the date:** Is the story fresh, or is it an old story recycled? (Note: Context matters; a photo from 2010 can be presented as "breaking news" about today).
+- [ ] **Look for grammar and spelling:** Professional outlets generally have editors. Excessive errors suggest a lack of quality control.
+- [ ] **Check for sensationalism:** Does the article use all caps, excessive exclamation points, or fear-mongering language (e.g., "SHOCKING," "HIDDEN TRUTH")?
+- [ ] **Distinguish fact from opinion:** Are statements verifiable data, or are they subjective judgments?
+- [ ] **Check for loaded language:** Look for words designed to manipulate emotion rather than inform.
+
+---
+
+### 🔗 Phase 5: The Evidence (What supports the claim?)
+*Trace the proof back to the source.*
+
+- [ ] **Follow the links:** Do the hyperlinks in the article actually lead to the sources claimed? Or do they lead to dead pages or unrelated articles?
+- [ ] **Check primary sources:** Does the article cite a government report, academic study, or official transcript? If it cites "experts" without names, be skeptical.
+- [ ] **Verify images/video:**
+    - [ ] Is the image caption accurate?
+    - [ ] Run an image through Google Reverse Image Search to see where it originally appeared.
+    - [ ] Check for signs of AI generation or photoshop (e.g., distorted hands, weird text, inconsistent lighting).
+
+---
+
+### 🔍 Phase 6: Lateral Reading (External Verification)
+*Leave the website and search elsewhere.*
+
+- [ ] **Google the claim + "misinformation" or "debunked":** See if other outlets have already addressed it.
+- [ ] **Check fact-checking organizations:** Search for the story on Snopes, PolitiFact, FactCheck.org, Reuters Fact Check, or AP News.
+- [ ] **Consult diverse sources:** Read about the topic from at least three different reputable outlets with varying political perspectives. Is the core information consistent?
+- [ ] **Wait before sharing:** If it is a breaking story, wait 24–48 hours. Often, initial reports are wrong and get corrected later.
+
+---
+
+### 🚩 Red Flag Quick-Fire
+*If you answer "YES" to any of these, proceed with extreme caution:*
+
+- [ ] **Is the URL misspelled?** (e.g., `nytimes.com.co` instead of `nytimes.com`)
+- [ ] **Does it ask for personal information or a donation immediately?**
+- [ ] **Are there pop-up ads obscuring the content?**
+- [ ] **Is the claim too perfect to be true?** (e.g., "Scientists confirm Miracle Cure")
+- [ ] **Did the article mention a celebrity saying something they likely wouldn't say in a professional context?**
+
+### 🛠️ Recommended Tools for Verification
+*   **Search Engines:** Google Advanced Search, Yandex Reverse Image Search.
+*   **Fact Checkers:** Snopes, PolitiFact, FactCheck.org.
+*   **Media Bias:** AllSides.com, MediaBias/FactCheck.com.
+*   **Lateral Reading:** NewsGuard (Browser extension that rates sites).
+
+### 🧠 The Golden Rule: Stop Before You Share
+> **"If it makes you angry, think twice."**
+> *"Don't share what you haven't verified."*
+> *"Trust the process, not just the source."*

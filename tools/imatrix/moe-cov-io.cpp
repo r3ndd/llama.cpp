@@ -570,9 +570,12 @@ static bool write_covariance_file(
             gguf_add_tensor(ctx_gguf, t_n);
         }
 
+        const enum ggml_type cov_tensor_type =
+                precision == IMATRIX_COV_F8 ? GGML_TYPE_F32 : tensor_type;
+
         struct ggml_tensor * t_sum = ggml_new_tensor_1d(ctx, tensor_type, target.dim);
         struct ggml_tensor * t_outer = ggml_new_tensor_2d(ctx, tensor_type, target.dim, target.dim);
-        struct ggml_tensor * t_cov = ggml_new_tensor_2d(ctx, tensor_type, target.dim, target.dim);
+        struct ggml_tensor * t_cov = ggml_new_tensor_2d(ctx, cov_tensor_type, target.dim, target.dim);
 
         ggml_set_name(t_sum, string_format("moe_cov.%s.sum", tid.c_str()).c_str());
         ggml_set_name(t_outer, string_format("moe_cov.%s.outer", tid.c_str()).c_str());
@@ -590,7 +593,7 @@ static bool write_covariance_file(
             std::memcpy(t_sum->data, target.sum_f8.data(), target.sum_f8.size() * sizeof(int8_t));
             std::memcpy(t_outer->data, target.outer_f8.data(), target.outer_f8.size() * sizeof(int8_t));
 
-            std::vector<int8_t> cov(target.outer_f8.size(), 0);
+            std::vector<float> cov(target.outer_f8.size(), 0.0f);
             if (target.n > 1) {
                 std::vector<float> mean(target.dim, 0.0f);
                 for (uint32_t j = 0; j < target.dim; ++j) {
@@ -599,14 +602,11 @@ static bool write_covariance_file(
                 for (uint32_t r = 0; r < target.dim; ++r) {
                     for (uint32_t c = 0; c < target.dim; ++c) {
                         const size_t idx = (size_t) r * target.dim + c;
-                        const float pop = (float) target.outer_f8[idx] / (float) target.n - mean[r] * mean[c];
-                        int v = (int) std::lround(pop);
-                        v = std::max(-127, std::min(127, v));
-                        cov[idx] = (int8_t) v;
+                        cov[idx] = (float) target.outer_f8[idx] / (float) target.n - mean[r] * mean[c];
                     }
                 }
             }
-            std::memcpy(t_cov->data, cov.data(), cov.size() * sizeof(int8_t));
+            std::memcpy(t_cov->data, cov.data(), cov.size() * sizeof(float));
         } else if (precision == IMATRIX_COV_F16) {
             if (target.sum_f16.size() != (size_t) target.dim ||
                 target.outer_f16.size() != (size_t) target.dim * target.dim) {

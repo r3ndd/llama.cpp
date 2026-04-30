@@ -1,0 +1,281 @@
+To implement idempotent event ingestion in PostgreSQL with conflict handling and audit timestamps, you can use the following pattern. This solution ensures data integrity, traceability, and scalability for event-driven systems.
+
+---
+
+## 1. Table Definition with Audit Fields and Indexes
+
+```sql
+CREATE TABLE events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_id VARCHAR(255) NOT NULL,  -- Unique business event identifier
+    event_type VARCHAR(100) NOT NULL,
+    payload JSONB NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    version INTEGER NOT NULL DEFAULT 0,
+    
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    processed_at TIMESTAMPTZ,
+    
+    CONSTRAINT uq_event_id UNIQUE (event_id),
+    CONSTRAINT chk_event_type CHECK (event_type != ''),
+    CONSTRAINT chk_status CHECK (status IN ('pending', 'processed', 'failed', 'skipped'))
+);
+
+CREATE INDEX idx_events_event_type ON events(event_type);
+CREATE INDEX idx_events_created_at ON events(created_at);
+CREATE INDEX idx_events_processed_at ON events(processed_at);
+CREATE INDEX idx_events_status ON events(status);
+```
+
+---
+
+## 2. UPSERT Query Pattern
+
+### A. Simple UPSERT with Conflict Handling
+
+```sql
+INSERT INTO events (event_id, event_type, payload, status, version)
+VALUES ($1, $2, $3, 'pending', 0)
+ON CONFLICT (event_id) DO UPDATE SET
+    payload = CASE 
+        WHEN EXCLUDED.version > events.version THEN EXCLUDED.payload 
+        ELSE events.payload 
+    END,
+    version = CASE 
+        WHEN EXCLUDED.version > events.version THEN EXCLUDED.version 
+        ELSE events.version 
+    END,
+    updated_at = NOW(),
+    status = CASE 
+        WHEN EXCLUDED.status = 'pending' THEN 'pending'
+        ELSE events.status
+    END
+RETURNING id, created_at, updated_at;
+```
+
+### B. UPSERT with Conflict Detection and Audit
+
+```sql
+INSERT INTO events (event_id, event_type, payload, status, version)
+VALUES ($1, $2, $3, 'pending', 0)
+ON CONFLICT (event_id) DO UPDATE SET
+    payload = CASE 
+        WHEN EXCLUDED.payload != events.payload THEN EXCLUDED.payload 
+        ELSE events.payload 
+    END,
+    updated_at = NOW(),
+    status = CASE 
+        WHEN events.status = 'pending' THEN 'pending'
+        ELSE events.status
+    END
+RETURNING 
+    id,
+    created_at,
+    updated_at,
+    CASE 
+        WHEN NOT EXISTS (
+            SELECT 1 FROM events WHERE event_id = EXCLUDED.event_id
+        ) THEN 'inserted'
+        ELSE 'updated'
+    END AS action_type;
+```
+
+---
+
+## 3. Idempotent Ingestion Function
+
+```sql
+CREATE OR REPLACE FUNCTION ingest_event(
+    p_event_id VARCHAR,
+    p_event_type VARCHAR,
+    p_payload JSONB,
+    p_status VARCHAR DEFAULT 'pending',
+    p_version INTEGER DEFAULT 0
+)
+RETURNS TABLE (
+    id UUID,
+    event_id VARCHAR,
+    action_type VARCHAR,
+    created_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ
+) LANGUAGE plpgsql AS $$
+BEGIN
+    RETURN QUERY
+    INSERT INTO events (event_id, event_type, payload, status, version)
+    VALUES (p_event_id, p_event_type, p_payload, p_status, p_version)
+    ON CONFLICT (event_id) DO UPDATE SET
+        payload = CASE 
+            WHEN EXCLUDED.payload != events.payload THEN EXCLUDED.payload 
+            ELSE events.payload 
+        END,
+        version = GREATEST(events.version, EXCLUDED.version),
+        updated_at = NOW(),
+        status = CASE 
+            WHEN events.status = 'pending' THEN EXCLUDED.status
+            ELSE events.status
+        END
+    RETURNING 
+        id,
+        event_id,
+        CASE 
+            WHEN NOT EXISTS (SELECT 1 FROM events WHERE event_id = EXCLUDED.event_id)
+            THEN 'INSERTED'
+            ELSE 'UPDATED'
+        END AS action_type,
+        created_at,
+        updated_at;
+END;
+$$;
+```
+
+---
+
+## 4. Processing Status Updates
+
+```sql
+CREATE OR REPLACE FUNCTION mark_event_processed(p_event_id VARCHAR)
+RETURNS VOID AS $$
+BEGIN
+    UPDATE events 
+    SET 
+        status = 'processed',
+        processed_at = NOW(),
+        updated_at = NOW()
+    WHERE event_id = p_event_id 
+    AND status = 'pending';
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION mark_event_failed(p_event_id VARCHAR)
+RETURNS VOID AS $$
+BEGIN
+    UPDATE events 
+    SET 
+        status = 'failed',
+        updated_at = NOW()
+    WHERE event_id = p_event_id 
+    AND status = 'pending';
+END;
+$$ LANGUAGE plpgsql;
+```
+
+---
+
+## 5. Event Deduplication and Re-processing Logic
+
+```sql
+CREATE OR REPLACE FUNCTION process_pending_events(
+    p_batch_size INTEGER DEFAULT 100
+)
+RETURNS TABLE (
+    id UUID,
+    event_id VARCHAR,
+    event_type VARCHAR,
+    payload JSONB,
+    action_type VARCHAR
+) LANGUAGE plpgsql AS $$
+BEGIN
+    RETURN QUERY
+    WITH processed AS (
+        UPDATE events e
+        SET 
+            status = 'processed',
+            processed_at = NOW(),
+            updated_at = NOW()
+        FROM (
+            SELECT id 
+            FROM events 
+            WHERE status = 'pending'
+            ORDER BY created_at ASC
+            LIMIT p_batch_size
+        ) sub
+        WHERE e.id = sub.id
+        RETURNING e.id, e.event_id, e.event_type, e.payload,
+            CASE WHEN e.processed_at IS NULL THEN 'new' ELSE 'reprocessed' END AS action_type
+    )
+    SELECT * FROM processed;
+END;
+$$;
+```
+
+---
+
+## 6. Audit Trail and Conflict Logging
+
+```sql
+CREATE TABLE event_audit_log (
+    log_id BIGSERIAL PRIMARY KEY,
+    event_id VARCHAR(255),
+    action VARCHAR(50) NOT NULL,
+    old_status VARCHAR(20),
+    new_status VARCHAR(20),
+    payload_before JSONB,
+    payload_after JSONB,
+    changed_by VARCHAR(100) DEFAULT 'system',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE OR REPLACE FUNCTION audit_event_changes()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'UPDATE' AND OLD.status != NEW.status THEN
+        INSERT INTO event_audit_log (
+            event_id, action, old_status, new_status,
+            payload_before, payload_after
+        ) VALUES (
+            NEW.event_id,
+            TG_OP,
+            OLD.status,
+            NEW.status,
+            OLD.payload,
+            NEW.payload
+        );
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_audit_event_changes
+AFTER UPDATE ON events
+FOR EACH ROW
+EXECUTE FUNCTION audit_event_changes();
+```
+
+---
+
+## 7. Example Usage
+
+```sql
+-- Insert a new event
+SELECT * FROM ingest_event(
+    'evt-001', 
+    'user.created', 
+    '{"user_id": 123, "email": "user@example.com"}'::jsonb
+);
+
+-- Attempt duplicate ingestion (idempotent)
+SELECT * FROM ingest_event(
+    'evt-001', 
+    'user.created', 
+    '{"user_id": 123, "email": "user@example.com"}'::jsonb
+);
+
+-- Process pending events
+SELECT * FROM process_pending_events(100);
+
+-- Check audit log
+SELECT * FROM event_audit_log WHERE event_id = 'evt-001' ORDER BY created_at DESC;
+```
+
+---
+
+## Key Features
+
+- ✅ Idempotent event ingestion via `UNIQUE(event_id)` constraint
+- ✅ Conflict handling with version control and payload comparison
+- ✅ Full audit trail with timestamps and status transitions
+- ✅ Scalable with batching and index optimization
+- ✅ Extensible for retry, failure, and status tracking
+
+This pattern provides a robust foundation for event-driven systems that require consistency, traceability, and idempotency.

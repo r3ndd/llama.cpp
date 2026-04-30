@@ -2,12 +2,11 @@
 
 ## Tensor layout and metadata
 
-- In `gguf-py`, `ReaderTensor.shape` is the logical GGUF shape (file order), while `ReaderTensor.data.shape` may be quantized byte layout; derive matrix dims from `reversed(tensor.shape.tolist())`.
+- In `gguf-py`, use logical dimensions from `reversed(ReaderTensor.shape.tolist())` (not `tensor.data.shape` byte layout), and keep `MatrixRef.shape` equal to the dequantized 2D slice with immediate validation.
 - Always dequantize quantized tensors via `gguf.dequantize(tensor.data, tensor.tensor_type)` before SVD; raw `tensor.data` rows are byte-packed and invalid for linear algebra.
 - MoE metadata is architecture-scoped (`<architecture>.expert_count`, `<architecture>.expert_used_count`, `<architecture>.block_count`), not always `llama.*`.
 - Qwen3.5 MoE stores routed experts in packed 3D `ffn_*_exps.weight` tensors; shared experts remain 2D (`ffn_*_shexp.weight`), so candidate counts look low unless 3D tensors are unpacked.
 - For packed 3D experts, detect expert axis by matching `<architecture>.expert_count` against logical dimensions; if ambiguous, skip with an explicit unknown-layout reason instead of guessing.
-- Keep `MatrixRef.shape` aligned with the actual dequantized 2D slice in `load_matrix_from_reader` and validate shape immediately to catch axis/order mistakes early.
 
 ## Metrics and spectral energy
 
@@ -26,4 +25,3 @@
 ## Dev/test ergonomics
 
 - llama.cpp HF cache lookup precedence: `LLAMA_CACHE` -> `HF_HUB_CACHE`/`HUGGINGFACE_HUB_CACHE` -> `HF_HOME/hub` -> `XDG_CACHE_HOME/huggingface/hub` -> `~/.cache/huggingface/hub`.
-- Run `scripts/tests/test_moe_svd_*` with `PYTHONPATH=<repo>/scripts` so `from moe_svd...` imports resolve during pytest collection.

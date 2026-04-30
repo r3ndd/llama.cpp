@@ -1,0 +1,39 @@
+The Mughal Empire (1526–1707/1857) was a Turco-Mongol Islamic dynasty that established one of the largest and most sophisticated states in pre-modern South Asia. Its longevity and wealth were built upon a foundation of military expansion and a highly centralized yet adaptable administrative system.
+
+### I. The Rise of the Mughal Empire
+The empire's trajectory moved from an invasion force to a stabilized imperial power over three centuries.
+
+*   **Founding (Babur, 1526):** Timurid prince Babur invaded India from Kabul and defeated Ibrahim Lodi at the **First Battle of Panipat (1526)**. Using superior gunpowder technology and field artillery (the "Ottoman-style" army), he established a foothold in Delhi and Agra.
+*   **Consolidation (Humayun & Sher Shah Suri):** Humayun was displaced by the Afghan emperor Sher Shah Suri but eventually reclaimed his throne. This interlude highlighted the need for better logistics and revenue management.
+*   **Golden Age (Akbar, 1556–1605):** Akbar is credited with "Mughalizing" the empire. He secured power through military victories and political integration, notably marrying Rajput princesses and employing Hindu nobles (such as Raja Todar Mal and Birbal) in high offices.
+*   **Expansion (Aurangzeb, 1658–1707):** Under Aurangzeb Alamgir, the empire reached its greatest territorial extent, covering nearly all of the Indian subcontinent. However, the prolonged Deccan wars drained resources, leading to administrative strain after his death.
+
+### II. Key Administrative Innovations
+The Mughal administration is considered a high point in South Asian bureaucracy due to its attempts to standardize control over diverse regions and populations.
+
+**1. The Mansabdari System**
+The backbone of Mughal governance was the *Mansabdari* system, introduced largely by Akbar but refined over time.
+*   **Ranking:** It was a hierarchical civil-military service. Officials (*Mansabdars*) were assigned a rank (Zat) and a cavalry quota (Sawar).
+*   **Meritocracy vs. Lineage:** Promotion depended on military efficiency and royal favor rather than solely hereditary birth, theoretically reducing the power of feudal lords.
+*   **Payment:** Mansabdars did not hold land directly; they held *Jagirs* (land grants) to collect revenue to fund their stipends and maintain troops, which the state could withdraw upon demotion.
+
+**2. Land Revenue Reforms (Zabt System)**
+To ensure economic stability, the empire developed a systematic method for taxation.
+*   **Measurement:** Under Akbar, Minister Raja Todar Mal conducted extensive land surveys (*Girdawari*), classifying soil by fertility.
+*   **The Dahsala (Pahara):** Revenue was fixed as 1/3 of the average produce of the previous ten years to shield peasants from volatile prices or bad harvests.
+*   **Standardization:** This created a predictable cash flow for the treasury and reduced arbitrary exploitation by local governors.
+
+**3. Provincial Administration (Subahs)**
+To manage a vast territory, the empire was divided into provinces called *Subahs*.
+*   **Separation of Powers:** The governor (*Subedar*) held military and executive power, while the revenue collector (*Diwan*) had financial authority over the subah. This separation prevented provincial governors from amassing enough independent wealth to rebel against the throne.
+*   **Lower Units:** These were subdivided into *Sarkars*, *Parganas*, and *Villages*, creating a direct line of bureaucratic oversight down to the village level.
+
+**4. Religious Policy and Justice**
+The empire utilized religious policy as an administrative tool for cohesion.
+*   **Sulh-i-kul (Peace with All):** Akbar’s policy of religious tolerance allowed Hindus, Sikhs, and Jains to serve in government. The *Mahzar* (Infallibility Decree) declared the Emperor supreme in religious matters, centralizing ideological authority.
+*   **Qazis and Adalats:** While Islamic law (*Sharia*) prevailed in personal matters, customary laws often governed civil disputes, ensuring broader acceptance among the non-Muslim majority.
+
+### III. Legacy and Conclusion
+The Mughal administrative model unified India politically for nearly two centuries, creating a shared economy (via standardized currency like the *Rupiya*), uniform weights and measures, and road networks (*Sarak*).
+
+However, the system contained fatal flaws: it relied heavily on a capable central monarch. Upon Akbar's successor, the **Jagirdari Crisis** emerged—there were too many nobles but not enough land grants to support them, leading to corruption. Furthermore, Aurangzeb’s shift away from tolerance alienated key allies (Rajputs and Marathas). Despite its eventual decline, the Mughal framework established the administrative template that the British East India Company later adapted during their colonial rule.
